@@ -2,26 +2,37 @@
 # Fully connected dense neural network fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 65
+seed: &seed 166
 name: &config "SHL_DNN.yaml"
 framework: "pytorch"
 
-# paths:
-#   output: &output "results/"              # Output directory for results
-#   dataset: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF" # Dataset path
 paths:
   output: &output "results/"              # Output directory for results
-  dataset: "/Users/andrewxu/Documents/DataHub/local_images/MMF" # Dataset path
+  # dataset: "/Users/andrewxu/Documents/DataHub/local_images/MMF" 
+  # dataset: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF"
+  # dataset: "C:/Users/xqiyuan/cernbox/Documents/DataHub/datasets/2024-08-15/dataset/2" 
+  dataset: "C:/Users/xqiyuan/cernbox/Documents/DataHub/local_images/MMF"
 
 training:
-  epochs: &epochs 50                      # Number of full passes over training data
+  epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
+  batch_size: &batch 32                   # Number of samples per batch
+
+model:
+  # Fully Connected Neural Network Parameters
+  hidden_size: 4096                       # Number of neurons in hidden layer
+  dropout_rate: 0.1                       # Dropout probability for regularization
+  # Training Parameters
+  weight_init: "xavier"                   # Weight initialization method
+  # Architecture Details
+  activation: "relu"                      # Activation function for hidden layer
+  use_dropout: true                       # Enable/disable dropout
 
 data:
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
-  input_image_size: &inp [128, 128]         # Speckle image dimensions [H, W]
-  output_size: &out [64, 64]              # Input pattern size [H, W]
+  input_image_size: &inp [64, 64]         # Speckle image dimensions [H, W]
+  output_size: &out [32, 32]              # Input pattern size [H, W]
   transforms:
     torch:
       - name: "torch_load_image"          # Image loading transform
@@ -53,7 +64,7 @@ data:
   dataset_ops:                            # Dataset level operations
     - name: "torch_batch"                 # Batch images
       params:
-        batch_size: 4                     # Number of images per batch
+        batch_size: *batch                # Number of images per batch
         shuffle: True                     # Shuffle dataset
         num_workers: 0                    # Number of worker threads for data loading
         prefetch_factor: 2                # Number of batches to prefetch
@@ -64,22 +75,11 @@ callbacks:
   - name: "torch_early_stopping"          # Factory key for early stopping
     params:
       monitor: "val_loss"                 # Metric to monitor
-      patience: 8                         # Epochs to wait before stopping
+      patience: 15                        # Epochs to wait before stopping
   - name: "torch_serialized_image_reconstruction_callback"
     params:
       save_dir: *output                   # Directory to save results
       inp_size: *inp
       out_size: *out
-
-model:
-  # Fully Connected Neural Network Parameters
-  hidden_size: 4096                       # Number of neurons in hidden layer
-  dropout_rate: 0.2                       # Dropout probability for regularization
-  # Training Parameters
-  learning_rate: 0.001                    # Learning rate for Adam optimizer
-  weight_init: "xavier"                   # Weight initialization method
-  # Architecture Details
-  activation: "relu"                      # Activation function for hidden layer
-  use_dropout: true                       # Enable/disable dropout
 
 extra_files: ["SHL_DNN.py", *config]
