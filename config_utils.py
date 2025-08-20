@@ -5,7 +5,7 @@ import os, socket
 # Structured mapping (hostname substring -> machine profile)
 HOST_TO_MACHINE = {
     "mac": "mac-andrewxu",
-    "qiyuanxu": "win-qiyuanxu",
+    "uni-pc": "win-qiyuanxu",
     # add more as needed
 }
 
