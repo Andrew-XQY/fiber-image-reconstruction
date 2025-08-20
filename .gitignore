@@ -47,7 +47,8 @@ datasets/
 *.hdf5
 
 # Outputs
-results/
+results/*
+!results/.gitkeep
 outputs/
 runs/
 wandb/
