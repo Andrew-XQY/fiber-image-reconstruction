@@ -1,7 +1,7 @@
 # Multimode Fiber Image Reconstruction (ML/AI Models)
 
 This project explores **image-based machine learning models** for reconstructing images transmitted through multimode optical fibers.  
-The goal is to test and compare the performance of different ML/AI models for multimode fiber input–output image reconstruction.
+The goal is to test and compare the performance of different ML/AI models for multimode fiber input–output image reconstruction based on the loss.
 
 ---
 
