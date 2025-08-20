@@ -1,0 +1,71 @@
+# ====================
+# Swin-Transformer fiber image reconstruction configuration file
+# ====================
+
+seed: 188
+name: &config "SwinT.yaml"
+framework: "pytorch"
+
+paths:
+  output: &output "results/"              
+  # dataset: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF" 
+  # dataset: "/Users/andrewxu/Documents/DataHub/datasets/2024-08-15/dataset/2"
+  dataset: "/Users/andrewxu/Documents/DataHub/local_images/MMF" 
+
+model:
+  img_size: 256
+  in_chans: 1
+  out_chans: 1
+
+  # Encoder (Swin-T standard)
+  patch_size: 4
+  embed_dim: 96
+  depths: [2, 2, 6, 2]
+  num_heads: [3, 6, 12, 24]
+  window_size: 8
+  mlp_ratio: 4.0
+  qkv_bias: true
+  drop_path: 0.0
+
+  # Decoder (conv upsampling)
+  decoder_channels: [768, 384, 192, 96, 32]
+  final_activation: null
+  
+training:
+  batch_size: &batch 16                    # Samples per gradient update
+  epochs: &epochs 80                      # Number of full passes over training data
+  learning_rate: 1.0e-2                   # Initial learning rate for optimizer
+
+callbacks:
+  - name: "torch_batch_progress_bar"
+  - name: "torch_eta"                     # Factory key for ETA (training time estimation)
+    params:
+      total_epochs: *epochs               # Total number of training epochs
+      smoothing: 5                        # Smoothing factor for ETA calculation
+      sink: "print"                       # Sink function for output (e.g., print or logging)
+  - name: "torch_early_stopping"          # Factory key for early stopping
+    params:
+      monitor: "val_loss"                 # Metric to monitor
+      patience: 8                         # Epochs to wait before stopping
+  - name: "torch_image_reconstruction_callback"
+    params:
+      save_dir: *output                   # Directory to save results
+
+data:
+  train_val_split: 0.8                    # Train/validation split ratio
+  val_test_split: 0.5                     # Validation/test split ratio
+  transforms:
+    torch:
+      - name: "torch_load_image"          # Image loading transform
+      - name: "torch_to_tensor"           # Convert to tensor
+      - name: "torch_to_grayscale"        # Convert to grayscale
+      - name: "torch_remap_range"         # Normalize pixel values to [0,1]
+      - name: "torch_split_width"         # Split image into left/right halves
+        params:
+          swap: True                      # Swap left/right halves
+  dataset_ops:                            # Dataset level operations
+    - name: "torch_batch"                 # Batch images
+      params:
+        batch_size: *batch                # Number of images per batch
+
+extra_files: ["SwinT.py", *config]
