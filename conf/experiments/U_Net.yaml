@@ -11,14 +11,14 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 training:
-  epochs: &epochs 50                      # Number of full passes over training data
+  epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
 
 data:
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
-  input_image_size: &inp [128, 128]         # Speckle image dimensions [H, W]
-  output_size: &out [128, 128]              # Input pattern size [H, W]
+  input_image_size: &inp [128, 128]       # Speckle image dimensions [H, W]
+  output_size: &out [128, 128]            # Input pattern size [H, W]
   transforms:
     torch:
       - name: "torch_load_image"          # Image loading transform
