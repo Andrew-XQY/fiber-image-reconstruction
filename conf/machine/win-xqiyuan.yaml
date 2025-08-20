@@ -1,0 +1,4 @@
+# conf/machine/win-xqiyuan.yaml
+paths:
+  datasets:
+    mmf: "C:/Users/xqiyuan/cernbox/Documents/DataHub/local_images/MMF"

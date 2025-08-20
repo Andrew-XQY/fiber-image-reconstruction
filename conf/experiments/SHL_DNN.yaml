@@ -7,14 +7,11 @@ name: &config "SHL_DNN.yaml"
 framework: "pytorch"
 
 paths:
-  output: &output "results/"              # Output directory for results
-  # dataset: "/Users/andrewxu/Documents/DataHub/local_images/MMF" 
-  # dataset: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF"
-  # dataset: "C:/Users/xqiyuan/cernbox/Documents/DataHub/datasets/2024-08-15/dataset/2" 
-  dataset: "C:/Users/xqiyuan/cernbox/Documents/DataHub/local_images/MMF"
+  output:  ${paths.output_root}           # comes from shared defaults
+  dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 training:
-  epochs: &epochs 100                     # Number of full passes over training data
+  epochs: &epochs 5                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
   batch_size: &batch 32                   # Number of samples per batch
 
@@ -78,8 +75,8 @@ callbacks:
       patience: 15                        # Epochs to wait before stopping
   - name: "torch_serialized_image_reconstruction_callback"
     params:
-      save_dir: *output                   # Directory to save results
+      save_dir: ${paths.output}           # Directory to save results
       inp_size: *inp
       out_size: *out
 
-extra_files: ["SHL_DNN.py", *config]
+extra_files: ["SHL_DNN.py"]
