@@ -4,9 +4,9 @@ import os, socket
 
 # Structured mapping (hostname substring -> machine profile)
 HOST_TO_MACHINE = {
-    "mac": "mac-andrewxu",
-    "mws-147574r": "win-qiyuanxu",
-    "xqiyuan": "win-xqiyuan",
+    "mac": "mac-andrewxu",                  # if hostname contains "mac" → use conf/machine/mac-andrewxu.yaml
+    "mws-147574r": "win-qiyuanxu",          # if hostname contains "mws-147574r" → use conf/machine/win-qiyuanxu.yaml
+    "xqiyuan": "win-xqiyuan",               # if hostname contains "xqiyuan" → use conf/machine/win-xqiyuan.yaml
     # add more as needed
 }
 
