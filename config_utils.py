@@ -7,7 +7,7 @@ HOST_TO_MACHINE = {
     "mac": "mac-andrewxu",                  # if hostname contains "mac" → use conf/machine/mac-andrewxu.yaml        
     "mws-147574r": "win-qiyuanxu",          # if hostname contains "mws-147574r" → use conf/machine/win-qiyuanxu.yaml
     "pcbe15789": "win-xqiyuan",             # if hostname contains "pcbe15789" → use conf/machine/win-xqiyuan.yaml
-    # add more as needed
+    # add more as needed, add new hostname + machine profile pairs
 }
 
 def detect_machine() -> str:
