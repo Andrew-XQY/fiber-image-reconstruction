@@ -2,7 +2,7 @@
 # Swin-Transformer fiber image reconstruction configuration file
 # ====================
 
-seed: 188
+seed: &seed 188
 name: &config "SwinT.yaml"
 framework: "pytorch"
 
@@ -65,5 +65,9 @@ data:
     - name: "torch_batch"                 # Batch images
       params:
         batch_size: *batch                # Number of images per batch
+        shuffle: True                     # Shuffle dataset
+        num_workers: 0                    # Number of worker threads for data loading
+        prefetch_factor: 2                # Number of batches to prefetch
+        seed: *seed                       # Random seed for reproducibility
 
 extra_files: ["SwinT.py"]

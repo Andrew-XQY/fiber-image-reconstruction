@@ -2,7 +2,7 @@
 # Transmission matrix fiber image reconstruction configuration file
 # ====================
 
-seed: 176
+seed: &seed 176
 name: &config "TM.yaml"
 framework: "pytorch"
 
@@ -56,9 +56,10 @@ data:
   dataset_ops:                            # Dataset level operations
     - name: "torch_batch"                 # Batch images
       params:
-        batch_size: *batch                     # Number of images per batch
+        batch_size: *batch                # Number of images per batch
         shuffle: True                     # Shuffle dataset
         num_workers: 0                    # Number of worker threads for data loading
         prefetch_factor: 2                # Number of batches to prefetch
+        seed: *seed                       # Random seed for reproducibility
 
 extra_files: ["TM.py"]
