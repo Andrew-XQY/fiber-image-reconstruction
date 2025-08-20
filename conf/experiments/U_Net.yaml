@@ -6,12 +6,9 @@ seed: &seed 65
 name: &config "U_Net.yaml"
 framework: "pytorch"
 
-# paths:
-#   output: &output "results/"              # Output directory for results
-#   dataset: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF" # Dataset path
 paths:
-  output: &output "results/"              # Output directory for results
-  dataset: "/Users/andrewxu/Documents/DataHub/local_images/MMF" # Dataset path
+  output:  ${paths.output_root}           # comes from shared defaults
+  dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 training:
   epochs: &epochs 50                      # Number of full passes over training data
@@ -57,9 +54,9 @@ callbacks:
       patience: 8                         # Epochs to wait before stopping
   - name: "torch_image_reconstruction_callback"
     params:
-      save_dir: *output                   # Directory to save results
+      save_dir: ${paths.output}           # Directory to save results
 
 model:
   dropout_rate: 
 
-extra_files: ["U_Net.py", *config]
+extra_files: ["U_Net.py"]
