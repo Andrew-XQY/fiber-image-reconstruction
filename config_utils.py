@@ -6,7 +6,7 @@ import os, socket
 HOST_TO_MACHINE = {
     "mac": "mac-andrewxu",                  # if hostname contains "mac" → use conf/machine/mac-andrewxu.yaml        
     "uni-pc": "win-qiyuanxu",          # if hostname contains "uni-pc" → use conf/machine/win-qiyuanxu.yaml
-    # add more as needed
+    # add more as needed, add new hostname + machine profile pairs
 }
 
 def detect_machine() -> str:
