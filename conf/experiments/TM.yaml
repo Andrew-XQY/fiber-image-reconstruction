@@ -11,7 +11,7 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 training:
-  epochs: &epochs 5                     # Number of full passes over training data
+  epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-5                   # Initial learning rate for optimizer
   batch_size: &batch 32                   # Number of samples per gradient update
 
