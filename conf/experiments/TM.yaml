@@ -7,10 +7,8 @@ name: &config "TM.yaml"
 framework: "pytorch"
 
 paths:
-  output: &output "results/"              # Output directory for results
-  # dataset: "C:/Users/qiyuanxu/Documents/DataHub/datasets/2024-08-15/dataset/2"
-  # dataset: "/Users/andrewxu/Documents/DataHub/local_images/MMF" 
-  dataset: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF" 
+  output:  ${paths.output_root}           # comes from shared defaults
+  dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 training:
   epochs: &epochs 100                     # Number of full passes over training data
@@ -25,7 +23,7 @@ callbacks:
       patience: 20                        # Epochs to wait before stopping
   - name: "torch_image_reconstruction_callback"
     params:
-      save_dir: *output                   # Directory to save results
+      save_dir: ${paths.output}           # Directory to save results
 
 data:
   train_val_split: 0.8                    # Train/validation split ratio
@@ -63,4 +61,4 @@ data:
         num_workers: 0                    # Number of worker threads for data loading
         prefetch_factor: 2                # Number of batches to prefetch
 
-extra_files: ["TM.py", *config]
+extra_files: ["TM.py"]
