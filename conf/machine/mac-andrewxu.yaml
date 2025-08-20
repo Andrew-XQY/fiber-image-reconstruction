@@ -1,0 +1,4 @@
+# conf/machine/mac.yaml
+paths:
+  datasets:
+    mmf: "/Users/andrewxu/Documents/DataHub/local_images/MMF"
