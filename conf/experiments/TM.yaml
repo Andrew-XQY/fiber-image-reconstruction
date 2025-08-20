@@ -17,6 +17,8 @@ training:
 
 callbacks:
   - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
   - name: "torch_early_stopping"          # Factory key for early stopping
     params:
       monitor: "val_loss"                 # Metric to monitor
