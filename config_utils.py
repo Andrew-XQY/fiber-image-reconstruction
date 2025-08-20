@@ -6,7 +6,7 @@ import os, socket
 HOST_TO_MACHINE = {
     "mac": "mac-andrewxu",
     "mws-147574r": "win-qiyuanxu",
-    "xqiyuan": "win-xqiyuan",
+    "pcbe15789": "win-xqiyuan",
     # add more as needed
 }
 
