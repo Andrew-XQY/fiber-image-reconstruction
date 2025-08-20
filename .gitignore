@@ -32,6 +32,14 @@ datasets/
 *.npz
 *.npy
 
+# Images (ignore all)
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tiff
+*.gif
+
 # Model checkpoints
 *.ckpt
 *.pth
