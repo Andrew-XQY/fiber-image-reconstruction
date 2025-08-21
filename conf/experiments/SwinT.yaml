@@ -11,7 +11,6 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 model:
-  img_size: 256
   in_chans: 1
   out_chans: 1
 
@@ -30,9 +29,11 @@ model:
   final_activation: null
   
 training:
-  batch_size: &batch 16                    # Samples per gradient update
-  epochs: &epochs 80                      # Number of full passes over training data
-  learning_rate: 1.0e-2                   # Initial learning rate for optimizer
+  batch_size: &batch 16                   # Samples per gradient update
+  epochs: &epochs 100                     # Number of full passes over training data
+  learning_rate: 1.0e-4                   # Initial learning rate for optimizer
+  weight_decay: 0.05
+  betas: [0.9, 0.999]
 
 callbacks:
   - name: "torch_batch_progress_bar"
@@ -49,6 +50,8 @@ callbacks:
 data:
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
+  input_size: &inp [224, 224]             # Speckle image dimensions [H, W]
+  output_size: &out [224, 224]            # Input pattern size [H, W]
   transforms:
     torch:
       - name: "torch_load_image"          # Image loading transform
@@ -58,6 +61,15 @@ data:
       - name: "torch_split_width"         # Split image into left/right halves
         params:
           swap: True                      # Swap left/right halves
+      - name: "multi_transform"           # take the left/right and apply transforms in sequence order
+        params:
+          transforms:
+            - name: "torch_resize"        # Resize image to match 
+              params:
+                size: *inp                # Resize dimensions [H, W]
+            - name: "torch_resize"        # Resize image to match 
+              params:
+                size: *out                # Resize dimensions [H, W]
   dataset_ops:                            # Dataset level operations
     - name: "torch_batch"                 # Batch images
       params:
