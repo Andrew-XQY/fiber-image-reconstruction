@@ -13,20 +13,6 @@ paths:
 model:
   in_chans: 1
   out_chans: 1
-
-  # Encoder (Swin-T standard)
-  patch_size: 4
-  embed_dim: 96
-  depths: [2, 2, 6, 2]
-  num_heads: [3, 6, 12, 24]
-  window_size: 8
-  mlp_ratio: 4.0
-  qkv_bias: true
-  drop_path: 0.0
-
-  # Decoder (conv upsampling)
-  decoder_channels: [768, 384, 192, 96, 32]
-  final_activation: null
   
 training:
   batch_size: &batch 16                   # Samples per gradient update
