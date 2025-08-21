@@ -2,7 +2,7 @@
 # U-Net fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 65
+seed: &seed 42
 name: &config "U_Net.yaml"
 framework: "pytorch"
 
@@ -13,6 +13,14 @@ paths:
 training:
   epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
+  batch_size: &batch 32                   # Number of samples per gradient update
+
+model:
+  in_channels: 1                          # input channels (1=grayscale, 3=RGB, etc.)
+  out_channels: 1                         # output channels (e.g., 1 for regression/map)
+  enc_channels: [64, 128, 256, 512]       # encoder widths at each downsampling step
+  dec_channels: [64, 96, 128, 128]        # decoder widths at each upsampling step (asymmetric)
+  bottleneck_channels: 1024               # channels at the bottleneck (deepest layer)
 
 data:
   train_val_split: 0.8                    # Train/validation split ratio
@@ -40,7 +48,7 @@ data:
   dataset_ops:                            # Dataset level operations
     - name: "torch_batch"                 # Batch images
       params:
-        batch_size: 4                     # Number of images per batch
+        batch_size: *batch                # Number of images per batch
         shuffle: True                     # Shuffle dataset
         num_workers: 0                    # Number of worker threads for data loading
         prefetch_factor: 2                # Number of batches to prefetch
@@ -48,15 +56,14 @@ data:
 
 callbacks:
   - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
   - name: "torch_early_stopping"          # Factory key for early stopping
     params:
       monitor: "val_loss"                 # Metric to monitor
-      patience: 8                         # Epochs to wait before stopping
+      patience: 20                        # Epochs to wait before stopping
   - name: "torch_image_reconstruction_callback"
     params:
       save_dir: ${paths.output}           # Directory to save results
-
-model:
-  dropout_rate: 
 
 extra_files: ["U_Net.py"]

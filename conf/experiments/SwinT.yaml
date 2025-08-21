@@ -2,7 +2,7 @@
 # Swin-Transformer fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 188
+seed: &seed 42
 name: &config "SwinT.yaml"
 framework: "pytorch"
 
@@ -36,15 +36,12 @@ training:
 
 callbacks:
   - name: "torch_batch_progress_bar"
-  - name: "torch_eta"                     # Factory key for ETA (training time estimation)
     params:
-      total_epochs: *epochs               # Total number of training epochs
-      smoothing: 5                        # Smoothing factor for ETA calculation
-      sink: "print"                       # Sink function for output (e.g., print or logging)
+      only_keys: ["train_loss", "val_loss"]
   - name: "torch_early_stopping"          # Factory key for early stopping
     params:
       monitor: "val_loss"                 # Metric to monitor
-      patience: 8                         # Epochs to wait before stopping
+      patience: 20                        # Epochs to wait before stopping
   - name: "torch_image_reconstruction_callback"
     params:
       save_dir: ${paths.output}           # Directory to save results
