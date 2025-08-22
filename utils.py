@@ -1,6 +1,12 @@
+import sys
+import torch
+import torchvision.utils as vutils
+import math
+from pathlib import Path
+
 def make_beam_param_metric(extract_fn):
     def metric(pred, target):
-        import torch, math
+        
         if isinstance(pred, torch.Tensor):
             pred = pred.detach().cpu()
         if isinstance(target, torch.Tensor):
@@ -39,3 +45,25 @@ def make_beam_param_metric(extract_fn):
         return out
 
     return metric
+
+
+def save_tensor_image_and_exit(tensor: torch.Tensor, path: str = "results/debug.png") -> None:
+    x = tensor.detach().cpu()
+    x0 = x[0]
+    print(f"[DEBUG] input batch shape={tuple(x.shape)}, dtype={x.dtype}")
+    print(f"[DEBUG] x0 stats: min={x0.min().item():.6g}, max={x0.max().item():.6g}, mean={x0.mean().item():.6g}")
+
+    # Visualize without hiding scale errors; fall back to min-max if needed
+    img = x0
+    if img.dim() == 3 and img.size(0) in (1, 3):
+        img_to_save = img.clone()
+        m, M = img_to_save.min(), img_to_save.max()
+        if (M > m):
+            img_to_save = (img_to_save - m) / (M - m)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        vutils.save_image(img_to_save, path)
+        print(f"[DEBUG] Saved sample to {path}. Program stopped.")
+    else:
+        print("[DEBUG] Not saving: expected CHW with C=1 or 3.")
+
+    sys.exit(0)
