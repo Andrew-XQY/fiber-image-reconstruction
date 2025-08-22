@@ -12,7 +12,7 @@ paths:
 
 training:
   epochs: &epochs 100                     # Number of full passes over training data
-  learning_rate: 1.0e-3                   # Initial learning rate for optimizer
+  learning_rate: 1.0e-4                   # Initial learning rate for optimizer
   batch_size: &batch 32                   # Number of samples per gradient update
 
 model:
@@ -21,8 +21,10 @@ model:
   enc_channels: [32, 64, 128, 256, 512]   # encoder widths at each downsampling step  
   dec_channels: [32, 64, 128, 256, 512]   # decoder widths at each upsampling step
   bottleneck_channels: 1024               # channels at the bottleneck (deepest layer)
+  use_skips: False
 
 data:
+  subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
   input_image_size: &inp [256, 256]       # Speckle image dimensions [H, W]
@@ -35,7 +37,7 @@ data:
       - name: "torch_remap_range"         # Normalize pixel values to [0,1]
       - name: "torch_split_width"         # Split image into left/right halves
         params:
-          swap: True                      # Swap left/right halves
+          swap: False                     # Swap left/right halves
       - name: "multi_transform"           # take the left/right and apply transforms in sequence order
         params:
           transforms:
