@@ -1,5 +1,5 @@
 # U-Net.py
-# Minimal U-Net with optional asymmetric channel widths and optional skip connections.
+# Minimal U-Net with optional asymmetric channel widths and optional skip connections. use_skips
 
 from typing import Sequence, Optional, Union
 import os
