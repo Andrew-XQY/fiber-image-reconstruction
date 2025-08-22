@@ -17,7 +17,7 @@ model:
 training:
   batch_size: &batch 16                   # Samples per gradient update
   epochs: &epochs 100                     # Number of full passes over training data
-  learning_rate: 3.0e-4                   # Initial learning rate for optimizer
+  learning_rate: 1.0e-3                   # Initial learning rate for optimizer
   weight_decay: 0.05
   betas: [0.9, 0.999]
 
@@ -34,7 +34,7 @@ callbacks:
       save_dir: ${paths.output}           # Directory to save results
 
 data:
-  subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
+  subsample_fraction: 0.01                   # Total fraction of data to use, 1 for full set
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
   input_size: &inp [224, 224]             # Speckle image dimensions [H, W]
@@ -47,7 +47,7 @@ data:
       - name: "torch_remap_range"         # Normalize pixel values to [0,1]
       - name: "torch_split_width"         # Split image into left/right halves
         params:
-          swap: True                      # Swap left/right halves
+          swap: False                      # Swap left/right halves
       - name: "multi_transform"           # take the left/right and apply transforms in sequence order
         params:
           transforms:
