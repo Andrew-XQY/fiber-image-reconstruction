@@ -2,3 +2,4 @@
 paths:
   datasets:
     mmf: "/Users/andrewxu/Documents/DataHub/local_images/MMF"
+    syns: "/Users/andrewxu/Documents/DataHub/datasets/2024-08-15/dataset/1"

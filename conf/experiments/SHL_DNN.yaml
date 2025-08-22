@@ -23,6 +23,7 @@ model:
   use_dropout: true                       # Enable/disable dropout
 
 data:
+  subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
   input_image_size: &inp [64, 64]         # Speckle image dimensions [H, W]
