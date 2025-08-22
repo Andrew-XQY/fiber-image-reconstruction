@@ -1,11 +1,5 @@
 # U-Net.py
-# Minimal U-Net with optional asymmetric channel widths.
-# - Pass enc_channels and dec_channels (same length) to control widths.
-# - If dec_channels=None, it mirrors enc_channels (classic symmetric U-Net).
-# - Uses 2x2 MaxPool for downsampling and ConvTranspose2d for upsampling.
-#
-# Note: Input H,W ideally divisible by 2 ** len(enc_channels), but a guard
-#       is added to handle off-by-ones by resizing decoder features.
+# Minimal U-Net with optional asymmetric channel widths and optional skip connections.
 
 from typing import Sequence, Optional, Union
 import os
@@ -33,8 +27,8 @@ class UNet(nn.Module):
     """
     Encoder:  [DoubleConv -> MaxPool] * L   (channels = enc_channels[i])
     Bottleneck: DoubleConv(bottleneck_in, bottleneck_channels)
-    Decoder:  [Up(ConvTranspose2d) -> concat(skip) -> DoubleConv] * L
-              up out-ch = dec_channels[i]; DoubleConv maps (dec_i + enc_i) -> dec_i
+    Decoder:  [Up(ConvTranspose2d) -> (optional concat skip) -> DoubleConv] * L
+              up out-ch = dec_channels[i]; DoubleConv maps (dec_i [+ enc_i]) -> dec_i
     Final:    1x1 Conv to out_channels (optional Sigmoid)
 
     Args:
@@ -45,6 +39,7 @@ class UNet(nn.Module):
                       if None, mirrors enc_channels (symmetric U-Net)
         bottleneck_channels: channels at bottleneck; defaults to 2*enc_channels[-1]
         use_sigmoid: apply Sigmoid at output (useful if labels are in [0,1])
+        use_skips: enable/disable skip connections (default True). If False, no concats.
     """
     def __init__(
         self,
@@ -54,6 +49,7 @@ class UNet(nn.Module):
         dec_channels: Optional[Sequence[int]] = None,
         bottleneck_channels: Optional[int] = None,
         use_sigmoid: bool = False,
+        use_skips: bool = True,
     ):
         super().__init__()
         self.in_channels = int(in_channels)
@@ -62,6 +58,7 @@ class UNet(nn.Module):
         self.dec_channels = [int(c) for c in (dec_channels or enc_channels)]
         if len(self.enc_channels) != len(self.dec_channels):
             raise ValueError("enc_channels and dec_channels must have the same length (same # of resolution steps).")
+        self.use_skips = bool(use_skips)
 
         depth = len(self.enc_channels)
         self.depth = depth
@@ -87,7 +84,8 @@ class UNet(nn.Module):
         for i in reversed(range(depth)):
             out_c = self.dec_channels[i]
             ups.append(nn.ConvTranspose2d(curr_c, out_c, kernel_size=2, stride=2))
-            dec_convs.append(DoubleConv(out_c + self.enc_channels[i], out_c))
+            in_to_dec = out_c + self.enc_channels[i] if self.use_skips else out_c
+            dec_convs.append(DoubleConv(in_to_dec, out_c))
             curr_c = out_c
         self.ups = nn.ModuleList(ups)
         self.dec_convs = nn.ModuleList(dec_convs)
@@ -98,23 +96,30 @@ class UNet(nn.Module):
         self.use_sigmoid = bool(use_sigmoid)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Encoder with skip collection
+        # Encoder with optional skip collection
         skips = []
         for down, pool in zip(self.downs, self.pools):
             x = down(x)
-            skips.append(x)
+            if self.use_skips:
+                skips.append(x)
             x = pool(x)
 
         # Bottleneck
         x = self.bottleneck(x)
 
-        # Decoder (pair with reversed skips). Resize guard if shapes misalign.
-        for up, dec, skip in zip(self.ups, self.dec_convs, reversed(skips)):
-            x = up(x)
-            if x.shape[-2:] != skip.shape[-2:]:
-                x = F.interpolate(x, size=skip.shape[-2:], mode="bilinear", align_corners=False)
-            x = torch.cat([skip, x], dim=1)
-            x = dec(x)
+        # Decoder
+        if self.use_skips:
+            for up, dec, skip in zip(self.ups, self.dec_convs, reversed(skips)):
+                x = up(x)
+                # Resize guard if shapes misalign.
+                if x.shape[-2:] != skip.shape[-2:]:
+                    x = F.interpolate(x, size=skip.shape[-2:], mode="bilinear", align_corners=False)
+                x = torch.cat([skip, x], dim=1)
+                x = dec(x)
+        else:
+            for up, dec in zip(self.ups, self.dec_convs):
+                x = up(x)
+                x = dec(x)
 
         x = self.final_conv(x)
         return self.output_act(x)
@@ -133,6 +138,7 @@ class UNet(nn.Module):
             "dec_channels": self.dec_channels,
             "bottleneck_channels": self._bottleneck_channels,
             "use_sigmoid": self.use_sigmoid,
+            "use_skips": self.use_skips,
         }
         torch.save(ckpt, path)
         return path
@@ -161,6 +167,7 @@ class UNet(nn.Module):
             dec_channels=ckpt.get("dec_channels", ckpt["enc_channels"]),
             bottleneck_channels=int(ckpt.get("bottleneck_channels", ckpt["enc_channels"][-1] * 2)),
             use_sigmoid=bool(ckpt.get("use_sigmoid", False)),
+            use_skips=bool(ckpt.get("use_skips", True)),  # default to True for old checkpoints
         )
         model.load_state_dict(ckpt["state_dict"])
         if device is not None:
