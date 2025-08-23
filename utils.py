@@ -47,6 +47,26 @@ def make_beam_param_metric(extract_fn):
     return metric
 
 
+# Extract beam parameters
+def extract_beam_parameters_flat(flat_img, **kwargs):
+    from xflow.extensions.physics.beam import extract_beam_parameters
+    """
+    Adapter for extract_beam_parameters to handle flattened square images.
+    Supports both NumPy arrays and PyTorch tensors.
+    """
+    import numpy as np
+    # Get total number of elements robustly
+    if hasattr(flat_img, "numel"):
+        n = flat_img.numel()
+    elif hasattr(flat_img, "size"):
+        n = flat_img.size
+    else:
+        n = len(flat_img)
+    side = int(np.sqrt(n))
+    img = flat_img.reshape((side, side))
+    return extract_beam_parameters(img, **kwargs)
+
+
 def save_tensor_image_and_exit(tensor: torch.Tensor, path: str = "results/debug.png") -> None:
     x = tensor.detach().cpu()
     x0 = x[0]

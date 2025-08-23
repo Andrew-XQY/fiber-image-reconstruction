@@ -5,4 +5,4 @@ paths:
   datasets:
     mmf: ${paths.project_root}/data/MMF
 
-  output_root: ${paths.project_root}/results
+  output_root: ${paths.project_root}/results/${oc.env:EXPERIMENT_NAME,}
