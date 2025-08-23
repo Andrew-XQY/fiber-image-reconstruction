@@ -2,4 +2,4 @@
 paths:
   datasets:
     mmf: "/workspace/dataset/MMF"
-  output_root: "/workspace/results"
+  output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME,}"

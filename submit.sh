@@ -7,15 +7,21 @@
 #   # apptainer pull torch_2.5_py312.sif docker://ghcr.io/andrew-xqy/ml-containers:2.5-py3.12-cuda12.1
 #   mkdir -p ~/dataset ~/results ~/results/slurm ~/code
 #
+# Check which partitions are available on your cluster
+#   sinfo
+#
 #   sbatch submit.sh
 #
 # Quick GPU test (optional):
 #   apptainer exec --nv ~/torch_2.5_py312.sif python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.version.cuda)"
+#
+# Check sbatch detailed info:
+#   scontrol show job <id>
 
 #SBATCH --job-name=beam_image_reconstruction_model_training
 #SBATCH --output=results/slurm/training-%j.out
 #SBATCH --error=results/slurm/training-%j.err
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu-a-lowsmall
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
@@ -24,12 +30,14 @@
 #SBATCH --time=24:00:00
 
 set -euo pipefail
-module load apps/apptainer
+module load apptainer
 
 IMG="$HOME/torch_2.5_py312.sif"
 DATA="$HOME/dataset"      # must contain a subfolder MMF
 OUT="$HOME/results"
 CODE="$HOME/code"
+
+echo "Using container image: $IMG"  # for debug check
 
 # Match SBATCH log path (relative to submit dir)
 mkdir -p results/slurm
@@ -42,7 +50,7 @@ srun apptainer exec --nv --writable-tmpfs \
   "$IMG" /bin/bash -lc '
     set -e
     python -m pip install -U pip
-    if [ -d /workspace/code/xflow ]; then pip install -e /workspace/code/xflow; fi
-    cd /workspace/code
-    python examples/fiber-image-reconstruction-comparison/train.py
+    if [ -d /workspace/code/XFlow ]; then pip install -e /workspace/code/XFlow; fi
+    cd /workspace/code/examples/fiber-image-reconstruction-comparison
+    python train.py
   '
