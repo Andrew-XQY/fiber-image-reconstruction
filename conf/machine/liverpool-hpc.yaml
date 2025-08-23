@@ -1,5 +1,5 @@
-# conf/machine/win-qiyuanxu.yaml
+# conf/machine/liverpool-hpc.yaml
 paths:
   datasets:
-    mmf: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF"
-    syns: ""
+    mmf: "/workspace/dataset/MMF"
+  output_root: "/workspace/results"
