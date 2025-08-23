@@ -1,9 +1,9 @@
 # ====================
-# Swin-Transformer fiber image reconstruction configuration file
+# Transmission matrix fiber image reconstruction configuration file
 # ====================
 
 seed: &seed 42
-name: &config "SwinT.yaml"
+name: &config "CAE.yaml"
 framework: "pytorch"
 
 paths:
@@ -11,15 +11,19 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 model:
-  in_chans: 1
-  out_chans: 1
-  
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,  128, 128, 256, 512, 512]
+  decoder:          [512, 512, 256, 128, 128, 64 ]
+  apply_batchnorm:  [0,   1,   1,   1,   1,   1  ]
+  apply_dropout:    [1,   1,   0,   0,   0,   0  ]
+  final_activation: sigmoid
+
 training:
-  batch_size: &batch 16                   # Samples per gradient update
   epochs: &epochs 100                     # Number of full passes over training data
-  learning_rate: 3.0e-4                   # Initial learning rate for optimizer
-  weight_decay: 0.05
-  betas: [0.9, 0.999]
+  learning_rate: 1.0e-4                   # Initial learning rate for optimizer
+  batch_size: &batch 32                   # Number of samples per gradient update
 
 callbacks:
   - name: "torch_batch_progress_bar"
@@ -34,11 +38,11 @@ callbacks:
       save_dir: ${paths.output}           # Directory to save results
 
 data:
-  subsample_fraction: 0.2                   # Total fraction of data to use, 1 for full set
+  subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
-  input_size: &inp [224, 224]             # Speckle image dimensions [H, W]
-  output_size: &out [224, 224]            # Input pattern size [H, W]
+  input_image_size: &inp [256, 256]       # Speckle image dimensions [H, W]
+  output_size: &out [256, 256]              # Input pattern size [H, W]
   transforms:
     torch:
       - name: "torch_load_image"          # Image loading transform
@@ -66,4 +70,4 @@ data:
         prefetch_factor: 2                # Number of batches to prefetch
         seed: *seed                       # Random seed for reproducibility
 
-extra_files: ["SwinT.py"]
+extra_files: ["CAE.py"]
