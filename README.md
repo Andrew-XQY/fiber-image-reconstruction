@@ -21,3 +21,7 @@ Install `xflow` via pip:
 
 ```bash
 pip install xflow-py
+
+git clone https://github.com/Andrew-XQY/fiber-image-reconstruction-comparison.git
+
+git pull
