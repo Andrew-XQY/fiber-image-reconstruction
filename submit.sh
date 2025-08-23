@@ -48,6 +48,6 @@ srun apptainer exec --nv --writable-tmpfs \
     if [ -d /workspace/code/xflow ]; then
       pip install -e /workspace/code/xflow
     fi
-    cd /workspace/code/examples/machine_learning
-    python training.py --data /workspace/dataset --out /workspace/results
+    cd /workspace/code/examples/
+    python train.py
   '
