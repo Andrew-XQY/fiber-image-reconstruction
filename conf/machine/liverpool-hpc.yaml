@@ -1,0 +1,5 @@
+# conf/machine/win-qiyuanxu.yaml
+paths:
+  datasets:
+    mmf: "C:/Users/qiyuanxu/Documents/DataHub/local_images/MMF"
+    syns: ""

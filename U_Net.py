@@ -202,7 +202,7 @@ class UNet(nn.Module):
     # ----------------------------- FORWARD -----------------------------
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # --- DEBUG: save and stop ---
-        save_tensor_image_and_exit(x)
+        # save_tensor_image_and_exit(x)
         # ----------------------------
     
         # Encoder with optional skip collection
