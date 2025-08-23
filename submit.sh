@@ -44,5 +44,5 @@ srun apptainer exec --nv --writable-tmpfs \
     python -m pip install -U pip
     if [ -d /workspace/code/xflow ]; then pip install -e /workspace/code/xflow; fi
     cd /workspace/code
-    python examples/train.py
+    python examples/fiber-image-reconstruction-comparison/train.py
   '
