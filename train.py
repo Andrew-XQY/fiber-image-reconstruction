@@ -8,12 +8,14 @@ import os
 from config_utils import load_config
 
 SAMPLE_FLATTENED = ['SHL_DNN']
+REGRESSION = ['ERN'] # Encoder-regressor
+
 
 # ==================== 
 # Configuration
 # ==================== 
 
-experiment_name = "SwinT"  # TM, SHL_DNN, U_Net, CAE, SwinT
+experiment_name = "CAE"  # TM, SHL_DNN, U_Net, CAE, SwinT
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=experiment_name))
 config = config_manager.get()
 config_manager.add_files(config["extra_files"])
@@ -57,27 +59,27 @@ for left_parts, right_parts in test_dataset:
 # Construct Model
 # ====================
 if experiment_name == "CAE":
-    from CAE import Autoencoder2D
+    from models.CAE import Autoencoder2D
     model = Autoencoder2D(
-            in_channels=int(config['model']["in_channels"]),
-            encoder=config['model']["encoder"],
-            decoder=config['model']["decoder"],
-            kernel_size=int(config['model']["kernel_size"]),
-            apply_batchnorm=config['model']["apply_batchnorm"],
-            apply_dropout=config['model']["apply_dropout"],
-            final_activation=str(config['model']["final_activation"]),
-        )
+        in_channels=int(config['model']["in_channels"]),
+        encoder=config['model']["encoder"],
+        decoder=config['model']["decoder"],
+        kernel_size=int(config['model']["kernel_size"]),
+        apply_batchnorm=config['model']["apply_batchnorm"],
+        apply_dropout=config['model']["apply_dropout"],
+        final_activation=str(config['model']["final_activation"]),
+    )
 elif experiment_name == "TM":
-    from TM import TransmissionMatrix
+    from models.TM import TransmissionMatrix
     model = TransmissionMatrix(
-    input_height = config["data"]["input_image_size"][0],
-    input_width = config["data"]["input_image_size"][1],
-    output_height = config["data"]["output_size"][0],
-    output_width = config["data"]["output_size"][1],
-    initialization = "xavier",
-)
+        input_height = config["data"]["input_image_size"][0],
+        input_width = config["data"]["input_image_size"][1],
+        output_height = config["data"]["output_size"][0],
+        output_width = config["data"]["output_size"][1],
+        initialization = "xavier",
+    )
 elif experiment_name == "SHL_DNN":
-    from SHL_DNN import SHLNeuralNetwork
+    from models.SHL_DNN import SHLNeuralNetwork
     model = SHLNeuralNetwork(
         input_size=config['data']['input_image_size'][0] * config['data']['input_image_size'][1],
         hidden_size=config['model']['hidden_size'], 
@@ -85,7 +87,7 @@ elif experiment_name == "SHL_DNN":
         dropout_rate=config['model']['dropout_rate'],
     )
 elif experiment_name == "U_Net":
-    from U_Net import UNet
+    from models.U_Net import UNet
     model = UNet(
         in_channels=config["model"]["in_channels"],
         out_channels=config["model"]["out_channels"],
@@ -98,7 +100,7 @@ elif experiment_name == "U_Net":
         use_sigmoid=config["model"]["use_sigmoid"],
     )
 elif experiment_name == "SwinT":
-    from SwinT import SwinUNet
+    from models.SwinT import SwinUNet
     model = SwinUNet(
         in_chans=config["model"]["in_chans"],
         out_chans=config["model"]["out_chans"],
@@ -156,7 +158,7 @@ history = trainer.fit(
     epochs=config['training']['epochs'],
 )
 
-# 4) persist
+# 4) save results
 trainer.save_history(f"{config['paths']['output']}/history.json")
 trainer.save_model(config["paths"]["output"])  # uses model.save_model(...) if available
 config_manager.save(output_dir=config["paths"]["output"], config_filename=config["name"])
