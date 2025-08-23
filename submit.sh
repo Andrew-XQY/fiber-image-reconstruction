@@ -36,13 +36,9 @@ mkdir -p results/slurm
 
 srun apptainer exec --nv --writable-tmpfs \
   -B "$DATA:/workspace/dataset:ro" \
-  # If you prefer stricter binding, use this instead:
-  # -B "$DATA/MMF:/workspace/dataset/MMF:ro" \
   -B "$OUT:/workspace/results" \
   -B "$CODE:/workspace/code" \
   --env MACHINE=liverpool-hpc \
-  --env EXPERIMENT_NAME=CAE_run1 \
-  --env PROJECT_ROOT=/workspace/code \
   "$IMG" /bin/bash -lc '
     set -e
     python -m pip install -U pip
