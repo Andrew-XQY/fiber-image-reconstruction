@@ -125,9 +125,10 @@ def evaluate_to_csv(
                 # predicted params
                 if mode == "img2img":
                     pred_res = extract_beam_parameters(outputs[i])
+                    pred_vals = {k: pred_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(pred_res, dict) else {k: -1.0 for k in PARAM_KEYS}
                 elif mode == "regression":
                     vec = outputs[i].reshape(-1).detach().cpu().tolist()
-                    pred_res = {
+                    pred_vals = {
                         "h_centroid": vec[0] if len(vec) > 0 else -1.0,
                         "v_centroid": vec[1] if len(vec) > 1 else -1.0,
                         "h_width":    vec[2] if len(vec) > 2 else -1.0,
@@ -136,30 +137,14 @@ def evaluate_to_csv(
                 else:
                     raise ValueError("mode must be 'img2img' or 'regression'")
 
-                # ground truth params (always from target image)
+                # ground truth params (from target image)
                 gt_res = extract_beam_parameters(targets[i])
-
-                # pack values (no extra processing)
-                if pred_res is None:
-                    pred_vals = {k: -1.0 for k in PARAM_KEYS}
-                else:
-                    pred_vals = {k: pred_res.get(k, -1.0) for k in PARAM_KEYS}
-
-                if gt_res is None:
-                    gt_vals = {k: -1.0 for k in PARAM_KEYS}
-                else:
-                    gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS}
-
-                # avgs
-                pred_avg = np.mean(list(pred_vals.values())) if all(v != -1.0 for v in pred_vals.values()) else -1.0
-                gt_avg   = np.mean(list(gt_vals.values()))   if all(v != -1.0 for v in gt_vals.values())   else -1.0
+                gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(gt_res, dict) else {k: -1.0 for k in PARAM_KEYS}
 
                 # row
                 row = {
                     **gt_vals,
-                    "avg": gt_avg,
                     **{f"{k}_pred": v for k, v in pred_vals.items()},
-                    "avg_pred": pred_avg,
                 }
                 rows.append(row)
 
