@@ -34,19 +34,20 @@ def detect_machine() -> str:
 
 
 def load_config(
-    exp_name: str, 
-    base_dir: str = "conf", 
-    experiment_name: str = None, 
-    machine: str = None
-    ) -> dict:
+    exp_name: str,
+    base_dir: str = "conf",
+    experiment_name: str | None = None,
+    machine: str | None = None,
+    prior_machine: bool = False,  
+) -> dict:
     """
-    Load + merge base paths, machine profile, and experiment config.
-    If experiment_name is provided, set it as env var for OmegaConf interpolation in paths.yaml.
-    Returns a fully resolved plain dict (no ${...} left).
+    If prior_machine=True, machine config overwrites experiment config.
+    Otherwise (default), experiment overwrites machine (original behavior).
     """
     os.environ.setdefault("EXPERIMENT_NAME", "")
     if experiment_name:
         os.environ["EXPERIMENT_NAME"] = experiment_name
+
     if machine is None:
         machine = detect_machine()
     print(f"[config_utils] Using machine profile: {machine}")
@@ -55,6 +56,12 @@ def load_config(
     mach = OmegaConf.load(Path(base_dir) / "machine" / f"{machine}.yaml")
     exp  = OmegaConf.load(Path(base_dir) / "experiments" / exp_name)
 
-    cfg = OmegaConf.merge(base, mach, exp)
+    if prior_machine:
+        # machine wins
+        cfg = OmegaConf.merge(base, exp, mach)
+    else:
+        # experiment wins (original)
+        cfg = OmegaConf.merge(base, mach, exp)
+
     return OmegaConf.to_container(cfg, resolve=True)
 

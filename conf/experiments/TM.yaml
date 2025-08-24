@@ -2,7 +2,7 @@
 # Transmission matrix fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 42
+seed: &seed 168     # 42, 168, 500    
 name: &config "TM.yaml"
 framework: "pytorch"
 

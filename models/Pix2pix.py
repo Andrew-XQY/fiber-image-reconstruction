@@ -171,7 +171,7 @@ class GeneratorUNet(nn.Module):
 
     # -------------------- Persistence APIs --------------------
 
-    def save_model(self, save_dir: str, model_name: str = "generator") -> str:
+    def save_model(self, save_dir: str, model_name: str = "model") -> str:
         os.makedirs(save_dir, exist_ok=True)
         path = os.path.join(save_dir, f"{model_name}.pth")
         payload = {
@@ -251,7 +251,7 @@ class PatchDiscriminator(nn.Module):
 
     # -------------------- Persistence APIs --------------------
 
-    def save_model(self, save_dir: str, model_name: str = "discriminator") -> str:
+    def save_model(self, save_dir: str, model_name: str = "model") -> str:
         os.makedirs(save_dir, exist_ok=True)
         path = os.path.join(save_dir, f"{model_name}.pth")
         payload = {
@@ -330,7 +330,7 @@ class Pix2Pix(nn.Module):
         self.generator.eval()
         return self.generator(x)
 
-    def save_model(self, save_dir: str, model_name: str = "pix2pix") -> str:
+    def save_model(self, save_dir: str, model_name: str = "model") -> str:
         os.makedirs(save_dir, exist_ok=True)
         path = os.path.join(save_dir, f"{model_name}.pth")
         payload = {
