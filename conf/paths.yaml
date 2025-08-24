@@ -1,8 +1,8 @@
 paths:
   # Use PROJECT_ROOT if set, otherwise fall back to "."
-  project_root: ${oc.env:PROJECT_ROOT,.}
+  project_root: ${oc.env:PROJECT_ROOT,"."}
 
   datasets:
     mmf: ${paths.project_root}/data/MMF
 
-  output_root: ${paths.project_root}/results/${oc.env:EXPERIMENT_NAME,}
+  output_root: ${paths.project_root}/results/${oc.env:EXPERIMENT_NAME,""}

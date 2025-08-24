@@ -6,7 +6,7 @@ import os, socket
 HOST_TO_MACHINE = {
     "mac": "mac-andrewxu",                  # if hostname contains "mac" → use conf/machine/mac-andrewxu.yaml        
     "uni-pc": "win-qiyuanxu",          # if hostname contains "uni-pc" → use conf/machine/win-qiyuanxu.yaml
-    "": "liverpool-hpc",
+    "": "liverpool-hpc",                    # direct set in env variable to tell use this machine
     # add more as needed, add new hostname + machine profile pairs
 }
 
@@ -38,6 +38,7 @@ def load_config(exp_name: str, base_dir: str = "conf", experiment_name: str = No
     If experiment_name is provided, set it as env var for OmegaConf interpolation in paths.yaml.
     Returns a fully resolved plain dict (no ${...} left).
     """
+    os.environ.setdefault("EXPERIMENT_NAME", "")
     if experiment_name:
         os.environ["EXPERIMENT_NAME"] = experiment_name
     machine = detect_machine()
