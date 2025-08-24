@@ -1,5 +1,5 @@
 # ====================
-# Transmission matrix fiber image reconstruction configuration file
+# Pix2pix (cGAN) fiber image reconstruction configuration file
 # ====================
 
 seed: &seed 42

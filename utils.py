@@ -61,6 +61,45 @@ def make_beam_param_metric(extract_fn):
 
     return metric
 
+# --- Param-based metric (no image extraction) ---
+def make_param_metric(keys=("h_centroid","v_centroid","h_width","v_width")):
+    import torch, math
+
+    def _to_vec(x):
+        # x: Tensor/np/list shaped (4,) or (B,4). Return 1D list[float].
+        if isinstance(x, torch.Tensor):
+            x = x.detach().cpu()
+        x = x.reshape(-1).tolist()
+        return x
+
+    def metric(pred, target):
+        p = _to_vec(pred)
+        t = _to_vec(target)
+        n = min(len(p), len(t))
+        if n < 4:  # nothing to score
+            return {}
+
+        # take first len(keys) values
+        p = p[:len(keys)]
+        t = t[:len(keys)]
+
+        out = {}
+        diffs = [pi - ti for pi, ti in zip(p, t)]
+        for k, d in zip(keys, diffs):
+            out[f"val_{k}_mae"]  = abs(d)
+            out[f"val_{k}_mse"]  = d*d
+            out[f"val_{k}_rmse"] = abs(d)**0.5 if d >= 0 else (d*d)**0.5  # same as sqrt(mse)
+
+        # simple overall
+        overall_mae = sum(abs(d) for d in diffs) / len(diffs)
+        overall_mse = sum(d*d for d in diffs) / len(diffs)
+        out["val_overall_mae"]  = overall_mae
+        out["val_overall_mse"]  = overall_mse
+        out["val_overall_rmse"] = overall_mse ** 0.5
+        return out
+
+    return metric
+
 
 # Extract beam parameters
 def extract_beam_parameters_flat(flat_img, **kwargs):
