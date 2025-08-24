@@ -36,6 +36,8 @@ callbacks:
 
 data:
   subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
+  training_set: "procIMGs/raw/"           # if used this then no need for the ratios
+  evaluation_set: "procIMGs_2/raw/"
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
   input_shape: &inp [224, 224]             # Speckle image dimensions [H, W]

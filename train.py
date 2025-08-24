@@ -5,7 +5,7 @@ from xflow.utils import load_validated_config, save_image
 
 import torch
 import os
-from datetime import datetime  # <-- NEW
+from datetime import datetime  
 from config_utils import load_config
 
 SAMPLE_FLATTENED = ['SHL_DNN']
@@ -18,12 +18,11 @@ REGRESSION = ['ERN'] # Encoder-regressor
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "SwinT"  # TM, SHL_DNN, U_Net, CAE, SwinT
+experiment_name = "TM"  # TM, SHL_DNN, U_Net, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
 config_manager.add_files(config["extra_files"])
-
 
 experiment_output_dir = config["paths"]["output"]
 os.makedirs(experiment_output_dir, exist_ok=True)
@@ -31,12 +30,19 @@ os.makedirs(experiment_output_dir, exist_ok=True)
 # ==================== 
 # Prepare Dataset
 # ====================
-provider = FileProvider(config["paths"]["dataset"]).\
-    subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) # 
-train_provider, temp_provider = provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
-val_provider, test_provider = temp_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
-transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
+"""The old method has a test data leak problem due to the similarity in adjacent samples"""
+# provider = FileProvider(config["paths"]["dataset"]).\
+#     subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) # 
+# train_provider, temp_provider = provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
+# val_provider, test_provider = temp_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
 
+training_folder = os.path.join(config["paths"]["dataset"], config["data"]["training_set"])
+evaluation_folder = os.path.join(config["paths"]["dataset"], config["data"]["evaluation_set"])
+train_provider = FileProvider(training_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
+evaluation_provider = FileProvider(evaluation_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
+val_provider, test_provider = evaluation_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
+
+transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 def make_dataset(provider):
     return PyTorchPipeline(provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
 
