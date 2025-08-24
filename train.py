@@ -20,7 +20,7 @@ GAN = ['Pix2pix']
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "ERN"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
+experiment_name = "TM"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
@@ -56,24 +56,23 @@ print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))
 
 # save a sample from dataset for debugging
-for left_parts, right_parts, _ in test_dataset:
-    # batch will be a tuple: (right_halves, left_halves) due to split_width
-    print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
-    if experiment_name in SAMPLE_FLATTENED:
-        save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/left_part.png")
-        save_image(right_parts[0].reshape(config['data']['output_shape']), config["paths"]["output"] + "/right_part.png")
-    elif experiment_name in REGRESSION:
-        save_image(left_parts[0], config["paths"]["output"] + "/left_part.png")
-        save_image(_[0], config["paths"]["output"] + "/right_part.png")
-    else:
-        save_image(left_parts[0], config["paths"]["output"] + "/left_part.png")
-        save_image(right_parts[0], config["paths"]["output"] + "/right_part.png")
-    break
-
-# if experiment_name == "ERN":
-#     temp = [(y) for (x, y, z) in train_dataset]
-#     print(temp)
-#     exit()
+if experiment_name in REGRESSION:
+    for left_parts, params, right_parts in test_dataset:
+        print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
+        save_image(left_parts[0], config["paths"]["output"] + "/input.png")
+        save_image(right_parts[0], config["paths"]["output"] + "/output.png")
+        break
+else:
+    for left_parts, right_parts in test_dataset:
+        # batch will be a tuple: (right_halves, left_halves) due to split_width
+        print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
+        if experiment_name in SAMPLE_FLATTENED:
+            save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/input.png")
+            save_image(right_parts[0].reshape(config['data']['output_shape']), config["paths"]["output"] + "/output.png")
+        else:
+            save_image(left_parts[0], config["paths"]["output"] + "/input.png")
+            save_image(right_parts[0], config["paths"]["output"] + "/output.png")
+        break
 
 # ==================== 
 # Construct Model
