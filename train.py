@@ -2,6 +2,7 @@
 from xflow import ConfigManager, FileProvider, PyTorchPipeline, show_model_info
 from xflow.data import build_transforms_from_config
 from xflow.utils import load_validated_config, save_image
+import xflow.extensions.physics
 
 import torch
 import os
@@ -19,7 +20,7 @@ GAN = ['Pix2pix']
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "Pix2pix"  # TM, SHL_DNN, U_Net, Pix2pix, CAE, SwinT
+experiment_name = "ERN"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
@@ -55,17 +56,24 @@ print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))
 
 # save a sample from dataset for debugging
-for left_parts, right_parts in test_dataset:
+for left_parts, right_parts, _ in test_dataset:
     # batch will be a tuple: (right_halves, left_halves) due to split_width
     print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
     if experiment_name in SAMPLE_FLATTENED:
         save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/left_part.png")
         save_image(right_parts[0].reshape(config['data']['output_shape']), config["paths"]["output"] + "/right_part.png")
+    elif experiment_name in REGRESSION:
+        save_image(left_parts[0], config["paths"]["output"] + "/left_part.png")
+        save_image(_[0], config["paths"]["output"] + "/right_part.png")
     else:
         save_image(left_parts[0], config["paths"]["output"] + "/left_part.png")
         save_image(right_parts[0], config["paths"]["output"] + "/right_part.png")
     break
 
+# if experiment_name == "ERN":
+#     temp = [(y) for (x, y, z) in train_dataset]
+#     print(temp)
+#     exit()
 
 # ==================== 
 # Construct Model
@@ -136,7 +144,15 @@ elif experiment_name == "Pix2pix":
     opt_g = torch.optim.Adam(model.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
     opt_d = torch.optim.Adam(disc.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
     losses = Pix2PixLosses(lambda_l1=config["training"]["lambda_l1"])
-
+elif experiment_name == "ERN":
+    from models.ERN import EncoderRegressor
+    model = EncoderRegressor(
+            in_channels=config['model']['in_channels'],
+            kernel_size=config['model']['kernel_size'],
+            encoder=config['model']['encoder'],
+            decoder=config['model']['decoder'],
+            final_activation=config['model']['final_activation'],  
+        )
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = model.to(device)
@@ -146,10 +162,10 @@ show_model_info(model)
 # ==================== 
 # Training
 # ====================
-from utils import make_beam_param_metric, extract_beam_parameters_flat, debug_extract_fn
+from utils import make_beam_param_metric, make_param_metric, extract_beam_parameters_flat, debug_extract_fn
 from functools import partial
 
-import xflow.extensions.physics
+
 from xflow import TorchTrainer, TorchGANTrainer
 from xflow.trainers import build_callbacks_from_config
 from xflow.extensions.physics.beam import extract_beam_parameters
@@ -169,6 +185,8 @@ callbacks[-1].set_dataset(test_dataset)
 if experiment_name in SAMPLE_FLATTENED:
     extract_beam_parameters_dict = partial(extract_beam_parameters_flat, as_array=False)
     beam_param_metric = make_beam_param_metric(extract_beam_parameters_dict)
+elif experiment_name in REGRESSION:   # e.g., "ERN"
+    beam_param_metric = make_param_metric()
 else:
     extract_beam_parameters_dict = partial(extract_beam_parameters, as_array=False)
     beam_param_metric = make_beam_param_metric(extract_beam_parameters_dict)

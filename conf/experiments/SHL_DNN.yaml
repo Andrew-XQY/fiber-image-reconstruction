@@ -1,5 +1,5 @@
 # ====================
-# Fully connected dense neural network fiber image reconstruction configuration file
+# Signle Hidden Layer Dense Neural Network fiber image reconstruction configuration file
 # ====================
 
 seed: &seed 42
