@@ -31,8 +31,8 @@ data:
   subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
-  input_image_size: &inp [256, 256]       # Speckle image dimensions [H, W]
-  output_size: &out [32, 32]              # Input pattern size [H, W]
+  input_shape: &inp [256, 256]       # Speckle image dimensions [H, W]
+  output_shape: &out [32, 32]              # Input pattern size [H, W]
   transforms:
     torch:
       - name: "torch_load_image"          # Image loading transform

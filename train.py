@@ -5,6 +5,7 @@ from xflow.utils import load_validated_config, save_image
 
 import torch
 import os
+from datetime import datetime  # <-- NEW
 from config_utils import load_config
 
 SAMPLE_FLATTENED = ['SHL_DNN']
@@ -14,20 +15,24 @@ REGRESSION = ['ERN'] # Encoder-regressor
 # ==================== 
 # Configuration
 # ==================== 
+# Create experiment output directory  (timestamped)
+timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
 experiment_name = "CAE"  # TM, SHL_DNN, U_Net, CAE, SwinT
-config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=experiment_name))
+folder_name = f"{experiment_name}-{timestamp}"  
+config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
 config_manager.add_files(config["extra_files"])
 
-# Create experiment output directory
+
 experiment_output_dir = config["paths"]["output"]
 os.makedirs(experiment_output_dir, exist_ok=True)
 
 # ==================== 
 # Prepare Dataset
 # ====================
-provider = FileProvider(config["paths"]["dataset"]).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) # 
+provider = FileProvider(config["paths"]["dataset"]).\
+    subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) # 
 train_provider, temp_provider = provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
 val_provider, test_provider = temp_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
@@ -47,8 +52,8 @@ for left_parts, right_parts in test_dataset:
     # batch will be a tuple: (right_halves, left_halves) due to split_width
     print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
     if experiment_name in SAMPLE_FLATTENED:
-        save_image(left_parts[0].reshape(config['data']['input_image_size']), config["paths"]["output"] + "/left_part.png")
-        save_image(right_parts[0].reshape(config['data']['output_size']), config["paths"]["output"] + "/right_part.png")
+        save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/left_part.png")
+        save_image(right_parts[0].reshape(config['data']['output_shape']), config["paths"]["output"] + "/right_part.png")
     else:
         save_image(left_parts[0], config["paths"]["output"] + "/left_part.png")
         save_image(right_parts[0], config["paths"]["output"] + "/right_part.png")
@@ -72,18 +77,18 @@ if experiment_name == "CAE":
 elif experiment_name == "TM":
     from models.TM import TransmissionMatrix
     model = TransmissionMatrix(
-        input_height = config["data"]["input_image_size"][0],
-        input_width = config["data"]["input_image_size"][1],
-        output_height = config["data"]["output_size"][0],
-        output_width = config["data"]["output_size"][1],
+        input_height = config["data"]["input_shape"][0],
+        input_width = config["data"]["input_shape"][1],
+        output_height = config["data"]["output_shape"][0],
+        output_width = config["data"]["output_shape"][1],
         initialization = "xavier",
     )
 elif experiment_name == "SHL_DNN":
     from models.SHL_DNN import SHLNeuralNetwork
     model = SHLNeuralNetwork(
-        input_size=config['data']['input_image_size'][0] * config['data']['input_image_size'][1],
+        input_size=config['data']['input_shape'][0] * config['data']['input_shape'][1],
         hidden_size=config['model']['hidden_size'], 
-        output_size=config['data']['output_size'][0] * config['data']['output_size'][1],
+        output_size=config['data']['output_shape'][0] * config['data']['output_shape'][1],
         dropout_rate=config['model']['dropout_rate'],
     )
 elif experiment_name == "U_Net":
@@ -104,7 +109,8 @@ elif experiment_name == "SwinT":
     model = SwinUNet(
         in_chans=config["model"]["in_chans"],
         out_chans=config["model"]["out_chans"],
-    )  
+        use_skips=config["model"]["use_skips"],
+    )
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = model.to(device)
