@@ -83,3 +83,87 @@ def list_subfolders_abs(dir_path):
     return [os.path.join(abs_dir_path, name)
             for name in os.listdir(abs_dir_path)
             if os.path.isdir(os.path.join(abs_dir_path, name))]
+    
+    
+
+
+
+import torch
+import os
+from pathlib import Path
+import pandas as pd
+import numpy as np
+
+from tqdm.auto import tqdm
+from typing import Dict, Any, Tuple, List
+from utils import SAMPLE_FLATTENED, REGRESSION, GAN 
+
+# ---- helpers ---------------------------------------------------------------
+PARAM_KEYS = ["h_centroid", "v_centroid", "h_width", "v_width"]
+
+
+def evaluate_to_csv(
+    model: torch.nn.Module,
+    test_loader,                 # yields (inputs, targets), both (B,C,H,W)
+    device: torch.device | str,
+    extract_beam_parameters,     # returns dict or None
+    mode: str,                   # "img2img" or "regression"
+    csv_path: str | Path,
+) -> pd.DataFrame:
+    model.eval()
+    rows = []
+    csv_path = Path(csv_path); csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with torch.no_grad():
+        for inputs, targets in tqdm(test_loader, desc="Evaluating", unit="batch", dynamic_ncols=True):
+            inputs  = inputs.to(device).float()
+            targets = targets.to(device).float()
+            outputs = model(inputs)
+            B = inputs.shape[0]
+
+            for i in range(B):
+                # predicted params
+                if mode == "img2img":
+                    pred_res = extract_beam_parameters(outputs[i])
+                elif mode == "regression":
+                    vec = outputs[i].reshape(-1).detach().cpu().tolist()
+                    pred_res = {
+                        "h_centroid": vec[0] if len(vec) > 0 else -1.0,
+                        "v_centroid": vec[1] if len(vec) > 1 else -1.0,
+                        "h_width":    vec[2] if len(vec) > 2 else -1.0,
+                        "v_width":    vec[3] if len(vec) > 3 else -1.0,
+                    }
+                else:
+                    raise ValueError("mode must be 'img2img' or 'regression'")
+
+                # ground truth params (always from target image)
+                gt_res = extract_beam_parameters(targets[i])
+
+                # pack values (no extra processing)
+                if pred_res is None:
+                    pred_vals = {k: -1.0 for k in PARAM_KEYS}
+                else:
+                    pred_vals = {k: pred_res.get(k, -1.0) for k in PARAM_KEYS}
+
+                if gt_res is None:
+                    gt_vals = {k: -1.0 for k in PARAM_KEYS}
+                else:
+                    gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS}
+
+                # avgs
+                pred_avg = np.mean(list(pred_vals.values())) if all(v != -1.0 for v in pred_vals.values()) else -1.0
+                gt_avg   = np.mean(list(gt_vals.values()))   if all(v != -1.0 for v in gt_vals.values())   else -1.0
+
+                # row
+                row = {
+                    **gt_vals,
+                    "avg": gt_avg,
+                    **{f"{k}_pred": v for k, v in pred_vals.items()},
+                    "avg_pred": pred_avg,
+                }
+                rows.append(row)
+
+    df = pd.DataFrame(rows)
+    df.to_csv(csv_path, index=False)
+    print(f"[OK] {len(df)} rows -> {csv_path}")
+    return df
