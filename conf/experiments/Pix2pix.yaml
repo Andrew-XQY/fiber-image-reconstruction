@@ -3,7 +3,7 @@
 # ====================
 
 seed: &seed 42
-name: &config "CAE.yaml"
+name: &config "Pix2pix.yaml"
 framework: "pytorch"
 
 paths:
@@ -16,14 +16,15 @@ model:
   kernel_size: 4
   encoder:          [64,  128, 128, 256, 512, 512]
   decoder:          [512, 512, 256, 128, 128, 64 ]
-  apply_batchnorm:  [0,   1,   1,   1,   1,   1  ]
-  apply_dropout:    [1,   1,   0,   0,   0,   0  ]
   final_activation: sigmoid
 
 training:
   epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
   batch_size: &batch 32                   # Number of samples per gradient update
+  betas: [0.9, 0.999]                     # Betas for Adam optimizer
+  lr: 2.0e-4
+  lambda_l1: 100.0
 
 callbacks:
   - name: "torch_batch_progress_bar"
@@ -72,4 +73,4 @@ data:
         prefetch_factor: 2                # Number of batches to prefetch
         seed: *seed                       # Random seed for reproducibility
 
-extra_files: ["models/CAE.py"]
+extra_files: ["models/Pix2pix.py"]
