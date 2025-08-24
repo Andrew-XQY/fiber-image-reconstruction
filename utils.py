@@ -4,6 +4,21 @@ import torchvision.utils as vutils
 import math
 from pathlib import Path
 
+
+def metric_debug(extract_fn):
+    def metric(pred, target):
+        # --- DEBUG: force a constant output ---
+        return {"val_debug_mae": 0.0, "val_debug_rmse": 0.0}
+    return metric
+
+def debug_extract_fn(img, **kwargs):
+    try:
+        print("[DEBUG] extract_fn input shape:", getattr(img, "shape", None), type(img))
+        return extract_beam_parameters_flat(img, **kwargs)
+    except Exception as e:
+        print("[WARNING] extract_fn failed with:", e)
+        return None
+
 def make_beam_param_metric(extract_fn):
     def metric(pred, target):
         

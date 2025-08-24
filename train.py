@@ -15,7 +15,7 @@ REGRESSION = ['ERN'] # Encoder-regressor
 # Configuration
 # ==================== 
 
-experiment_name = "CAE"  # TM, SHL_DNN, U_Net, CAE, SwinT
+experiment_name = "SwinT"  # TM, SHL_DNN, U_Net, CAE, SwinT
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=experiment_name))
 config = config_manager.get()
 config_manager.add_files(config["extra_files"])
@@ -114,7 +114,7 @@ show_model_info(model)
 # ==================== 
 # Training
 # ====================
-from utils import make_beam_param_metric, extract_beam_parameters_flat
+from utils import make_beam_param_metric, extract_beam_parameters_flat, debug_extract_fn
 from functools import partial
 
 import xflow.extensions.physics

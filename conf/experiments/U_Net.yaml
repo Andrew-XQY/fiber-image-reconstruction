@@ -71,4 +71,4 @@ callbacks:
     params:
       save_dir: ${paths.output}           # Directory to save results
 
-extra_files: ["U_Net.py"]
+extra_files: ["models/U_Net.py"]

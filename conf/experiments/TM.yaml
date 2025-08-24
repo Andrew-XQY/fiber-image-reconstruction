@@ -65,4 +65,4 @@ data:
         prefetch_factor: 2                # Number of batches to prefetch
         seed: *seed                       # Random seed for reproducibility
 
-extra_files: ["TM.py"]
+extra_files: ["models/TM.py"]

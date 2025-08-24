@@ -2,7 +2,7 @@
 # Fully connected dense neural network fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 255
+seed: &seed 42
 name: &config "SHL_DNN.yaml"
 framework: "pytorch"
 
@@ -79,4 +79,4 @@ callbacks:
       inp_size: *inp
       out_size: *out
 
-extra_files: ["SHL_DNN.py"]
+extra_files: ["models/SHL_DNN.py"]

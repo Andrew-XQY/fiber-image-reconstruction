@@ -7,9 +7,10 @@
 #   # apptainer pull torch_2.5_py312.sif docker://ghcr.io/andrew-xqy/ml-containers:2.5-py3.12-cuda12.1
 #   mkdir -p ~/dataset ~/results ~/results/slurm ~/code
 #
-# Check which partitions are available on your cluster
+# Check which --partition are available on my cluster:
 #   sinfo
 #
+# Submit and running the job:
 #   sbatch submit.sh
 #
 # Quick GPU test (optional):
@@ -17,6 +18,9 @@
 #
 # Check sbatch detailed info:
 #   scontrol show job <id>
+#
+# Download results e.g.
+# scp -r qiyuanxu@barklaviz2.liv.ac.uk:/users/qiyuanxu/results /Users/andrewxu/Desktop/HPC
 
 #SBATCH --job-name=beam_image_reconstruction_model_training
 #SBATCH --output=results/slurm/training-%j.out

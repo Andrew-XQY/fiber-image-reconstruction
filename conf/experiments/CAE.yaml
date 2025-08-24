@@ -70,4 +70,4 @@ data:
         prefetch_factor: 2                # Number of batches to prefetch
         seed: *seed                       # Random seed for reproducibility
 
-extra_files: ["CAE.py"]
+extra_files: ["models/CAE.py"]
