@@ -4,6 +4,10 @@ import torchvision.utils as vutils
 import math
 from pathlib import Path
 
+SAMPLE_FLATTENED = ['SHL_DNN']
+REGRESSION = ['ERN'] # Encoder-regressor
+GAN = ['Pix2pix']
+
 
 def metric_debug(extract_fn):
     def metric(pred, target):

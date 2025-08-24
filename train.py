@@ -8,11 +8,7 @@ import torch
 import os
 from datetime import datetime  
 from config_utils import load_config
-
-SAMPLE_FLATTENED = ['SHL_DNN']
-REGRESSION = ['ERN'] # Encoder-regressor
-GAN = ['Pix2pix']
-
+from utils import *
 
 # ==================== 
 # Configuration
@@ -161,7 +157,6 @@ show_model_info(model)
 # ==================== 
 # Training
 # ====================
-from utils import make_beam_param_metric, make_param_metric, extract_beam_parameters_flat, debug_extract_fn
 from functools import partial
 
 
