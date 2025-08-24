@@ -33,7 +33,12 @@ def detect_machine() -> str:
     )
 
 
-def load_config(exp_name: str, base_dir: str = "conf", experiment_name: str = None) -> dict:
+def load_config(
+    exp_name: str, 
+    base_dir: str = "conf", 
+    experiment_name: str = None, 
+    machine: str = None
+    ) -> dict:
     """
     Load + merge base paths, machine profile, and experiment config.
     If experiment_name is provided, set it as env var for OmegaConf interpolation in paths.yaml.
@@ -42,7 +47,8 @@ def load_config(exp_name: str, base_dir: str = "conf", experiment_name: str = No
     os.environ.setdefault("EXPERIMENT_NAME", "")
     if experiment_name:
         os.environ["EXPERIMENT_NAME"] = experiment_name
-    machine = detect_machine()
+    if machine is None:
+        machine = detect_machine()
     print(f"[config_utils] Using machine profile: {machine}")
 
     base = OmegaConf.load(Path(base_dir) / "paths.yaml")
@@ -52,9 +58,3 @@ def load_config(exp_name: str, base_dir: str = "conf", experiment_name: str = No
     cfg = OmegaConf.merge(base, mach, exp)
     return OmegaConf.to_container(cfg, resolve=True)
 
-
-# usage example
-# from config_utils import load_config
-
-# cfg = load_config("SHL_DNN.yaml")
-# print(cfg["paths"]["dataset"])

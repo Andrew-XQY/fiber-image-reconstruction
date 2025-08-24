@@ -1,3 +1,4 @@
+import os
 from xflow.extensions.style.aps import *
 import json
 import numpy as np
@@ -73,3 +74,12 @@ def plot_iterables(data, palette=APS_COLORS):
     # ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
+
+def list_subfolders_abs(dir_path):
+    """
+    Given a directory path, return a list of absolute paths of all folders directly under that directory.
+    """
+    abs_dir_path = os.path.abspath(dir_path)
+    return [os.path.join(abs_dir_path, name)
+            for name in os.listdir(abs_dir_path)
+            if os.path.isdir(os.path.join(abs_dir_path, name))]
