@@ -13,6 +13,7 @@ paths:
 model:
   in_chans: 1
   out_chans: 1
+  use_skips: False
   
 training:
   batch_size: &batch 16                   # Samples per gradient update
@@ -37,8 +38,8 @@ data:
   subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
   train_val_split: 0.8                    # Train/validation split ratio
   val_test_split: 0.5                     # Validation/test split ratio
-  input_size: &inp [224, 224]             # Speckle image dimensions [H, W]
-  output_size: &out [224, 224]            # Input pattern size [H, W]
+  input_shape: &inp [224, 224]             # Speckle image dimensions [H, W]
+  output_shape: &out [224, 224]            # Input pattern size [H, W]
   transforms:
     torch:
       - name: "torch_load_image"          # Image loading transform

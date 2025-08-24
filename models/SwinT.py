@@ -323,15 +323,16 @@ class BasicLayer(nn.Module):
         return x, reso, skip
 
 class UpLayer(nn.Module):
-    """Decoder stage: PatchExpand -> (skip add) -> Swin blocks * depth."""
+    """Decoder stage: PatchExpand -> (optional skip add) -> Swin blocks * depth."""
     def __init__(self, dim_in: int, input_resolution: Tuple[int, int], depth: int, num_heads: int,
-                 window_size: int, mlp_ratio: float = 4.):
+                 window_size: int, mlp_ratio: float = 4., use_skips: bool = True):
         super().__init__()
         self.expand = PatchExpand(input_resolution, dim_in)  # dim_out = dim_in//2
+        self.use_skips = use_skips
         dim_out = dim_in // 2
         out_reso = (input_resolution[0] * 2, input_resolution[1] * 2)
 
-        # after skip-add, run blocks at dim_out
+        # after (optional) skip-add, run blocks at dim_out
         self.blocks = nn.ModuleList()
         for i in range(depth):
             self.blocks.append(
@@ -341,10 +342,13 @@ class UpLayer(nn.Module):
                                      mlp_ratio=mlp_ratio)
             )
 
-    def forward(self, x: torch.Tensor, skip: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def forward(self, x: torch.Tensor, skip: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Tuple[int, int]]:
         x, reso = self.expand(x)  # now (B, (2H)*(2W), C//2)
-        # skip and x are same dim & resolution → elementwise add
-        x = x + skip
+        # skip and x are same dim & resolution → elementwise add (if enabled)
+        if self.use_skips and (skip is not None):
+            # optional light shape guard (won't trigger on correct wiring)
+            assert x.shape == skip.shape, f"Skip shape {skip.shape} != x shape {x.shape}"
+            x = x + skip
         for blk in self.blocks:
             x = blk(x)
         return x, reso
@@ -367,14 +371,17 @@ class SwinUNet(nn.Module):
         window_size: int = 7,
         patch_size: int = 4,
         mlp_ratio: float = 4.0,
+        use_skips: bool = True,    # <-- NEW: toggle encoder→decoder skip connections
     ):
         super().__init__()
         assert img_size % (patch_size * 16) == 0 or img_size == 224, "Fixed 224x224 in this minimal version."
 
         self.config = dict(
             img_size=img_size, in_chans=in_chans, out_chans=out_chans, embed_dim=embed_dim,
-            depths=depths, num_heads=num_heads, window_size=window_size, patch_size=patch_size, mlp_ratio=mlp_ratio
+            depths=depths, num_heads=num_heads, window_size=window_size, patch_size=patch_size,
+            mlp_ratio=mlp_ratio, use_skips=use_skips
         )
+        self.use_skips = use_skips
 
         # ---- Encoder ----
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
@@ -389,9 +396,9 @@ class SwinUNet(nn.Module):
         self.layer4 = BasicLayer(embed_dim * 8, reso3, depths[3], num_heads[3], window_size, mlp_ratio, downsample=False)  # bottleneck
 
         # ---- Decoder ----
-        self.up3 = UpLayer(embed_dim * 8, reso3, depths[2], num_heads[2], window_size, mlp_ratio)  # 7->14
-        self.up2 = UpLayer(embed_dim * 4, reso2, depths[1], num_heads[1], window_size, mlp_ratio)  # 14->28
-        self.up1 = UpLayer(embed_dim * 2, reso1, depths[0], num_heads[0], window_size, mlp_ratio)  # 28->56
+        self.up3 = UpLayer(embed_dim * 8, reso3, depths[2], num_heads[2], window_size, mlp_ratio, use_skips=use_skips)  # 7->14
+        self.up2 = UpLayer(embed_dim * 4, reso2, depths[1], num_heads[1], window_size, mlp_ratio, use_skips=use_skips)  # 14->28
+        self.up1 = UpLayer(embed_dim * 2, reso1, depths[0], num_heads[0], window_size, mlp_ratio, use_skips=use_skips)  # 28->56
 
         self.final_up = PatchExpandX4(reso0, embed_dim)  # 56->224
         self.head = nn.Linear(embed_dim // 4, out_chans)
@@ -407,9 +414,9 @@ class SwinUNet(nn.Module):
         x3, _, skip3 = self.layer3(x2)             # 7x7x768
         x4, _, _    = self.layer4(x3)              # 7x7x768
 
-        y3, _ = self.up3(x4, skip3)                # 14x14x384
-        y2, _ = self.up2(y3, skip2)                # 28x28x192
-        y1, _ = self.up1(y2, skip1)                # 56x56x96
+        y3, _ = self.up3(x4, skip3 if self.use_skips else None)  # 14x14x384
+        y2, _ = self.up2(y3, skip2 if self.use_skips else None)  # 28x28x192
+        y1, _ = self.up1(y2, skip1 if self.use_skips else None)  # 56x56x96
 
         y, _  = self.final_up(y1)                  # 224x224x(96//4)
         y     = self.head(y)                       # (B, 224*224, out_chans)
@@ -434,4 +441,3 @@ class SwinUNet(nn.Module):
             model = model.to(device)
         model.eval()
         return model
-
