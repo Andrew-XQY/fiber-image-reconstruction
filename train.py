@@ -10,6 +10,7 @@ from config_utils import load_config
 
 SAMPLE_FLATTENED = ['SHL_DNN']
 REGRESSION = ['ERN'] # Encoder-regressor
+GAN = ['Pix2pix']
 
 
 # ==================== 
@@ -18,7 +19,7 @@ REGRESSION = ['ERN'] # Encoder-regressor
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "TM"  # TM, SHL_DNN, U_Net, CAE, SwinT
+experiment_name = "Pix2pix"  # TM, SHL_DNN, U_Net, Pix2pix, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
@@ -117,6 +118,25 @@ elif experiment_name == "SwinT":
         out_chans=config["model"]["out_chans"],
         use_skips=config["model"]["use_skips"],
     )
+elif experiment_name == "Pix2pix":
+    from models.Pix2pix import GeneratorUNet, PatchDiscriminator, Pix2PixLosses
+    model = GeneratorUNet(
+        in_channels=config["model"]["in_channels"], 
+        out_channels=config["model"]["out_channels"], 
+        kernel_size=config["model"]["kernel_size"],
+        encoder=config["model"]["encoder"],
+        decoder=config["model"]["decoder"],
+        final_activation=config["model"]["final_activation"],  # match your data scaling
+    )
+    disc = PatchDiscriminator(
+        in_channels=config["model"]["in_channels"], 
+        cond_channels=config["model"]["out_channels"], 
+        kernel_size=config["model"]["kernel_size"],
+    )
+    opt_g = torch.optim.Adam(model.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
+    opt_d = torch.optim.Adam(disc.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
+    losses = Pix2PixLosses(lambda_l1=config["training"]["lambda_l1"])
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = model.to(device)
@@ -130,7 +150,8 @@ from utils import make_beam_param_metric, extract_beam_parameters_flat, debug_ex
 from functools import partial
 
 import xflow.extensions.physics
-from xflow.trainers import TorchTrainer, build_callbacks_from_config
+from xflow import TorchTrainer, TorchGANTrainer
+from xflow.trainers import build_callbacks_from_config
 from xflow.extensions.physics.beam import extract_beam_parameters
 
 # 1) loss/optimizer
@@ -153,16 +174,30 @@ else:
     beam_param_metric = make_beam_param_metric(extract_beam_parameters_dict)
 
 # 3) run training
-trainer = TorchTrainer(
-    model=model,
-    optimizer=optimizer,
-    criterion=criterion,
-    device=device,
-    callbacks=callbacks,
-    output_dir=config["paths"]["output"],
-    data_pipeline=train_dataset,
-    val_metrics=[beam_param_metric]
-)
+if experiment_name in GAN:
+    trainer = TorchGANTrainer(
+        generator=model,
+        discriminator=disc,
+        optimizer_g=opt_g,
+        optimizer_d=opt_d,
+        losses=losses,
+        device=device,
+        callbacks=callbacks,
+        output_dir=config["paths"]["output"],
+        data_pipeline=train_dataset,
+        val_metrics=[beam_param_metric],
+    )
+else:
+    trainer = TorchTrainer(
+        model=model,
+        optimizer=optimizer,
+        criterion=criterion,
+        device=device,
+        callbacks=callbacks,
+        output_dir=config["paths"]["output"],
+        data_pipeline=train_dataset,
+        val_metrics=[beam_param_metric]
+    )
 
 history = trainer.fit(
     train_loader=train_dataset, 
