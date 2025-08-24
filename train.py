@@ -18,7 +18,7 @@ REGRESSION = ['ERN'] # Encoder-regressor
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "CAE"  # TM, SHL_DNN, U_Net, CAE, SwinT
+experiment_name = "SwinT"  # TM, SHL_DNN, U_Net, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
