@@ -106,7 +106,7 @@ def evaluate_to_csv(
     test_loader,                 # yields (inputs, targets), both (B,C,H,W)
     device: torch.device | str,
     extract_beam_parameters,     # returns dict or None
-    mode: str,                   # "img2img" or "regression"
+    mode: str,                   # "img2img" or "regression" or "flattened"
 ) -> pd.DataFrame:
     model.eval()
     rows = []
@@ -131,12 +131,26 @@ def evaluate_to_csv(
                         "h_width":    vec[2] if len(vec) > 2 else -1.0,
                         "v_width":    vec[3] if len(vec) > 3 else -1.0,
                     }
+                elif mode == "flattened":
+                    # Assume output and target are 1D flattened square images
+                    pred_vec = outputs[i].reshape(-1).detach().cpu().numpy()
+                    side = int(np.sqrt(pred_vec.shape[0]))
+                    pred_img = pred_vec.reshape(side, side)
+                    pred_res = extract_beam_parameters(torch.from_numpy(pred_img))
+                    pred_vals = {k: pred_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(pred_res, dict) else {k: -1.0 for k in PARAM_KEYS}
                 else:
-                    raise ValueError("mode must be 'img2img' or 'regression'")
+                    raise ValueError("mode must be 'img2img', 'regression', or 'flattened'")
 
                 # ground truth params (from target image)
-                gt_res = extract_beam_parameters(targets[i])
-                gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(gt_res, dict) else {k: -1.0 for k in PARAM_KEYS}
+                if mode == "flattened":
+                    gt_vec = targets[i].reshape(-1).detach().cpu().numpy()
+                    side = int(np.sqrt(gt_vec.shape[0]))
+                    gt_img = gt_vec.reshape(side, side)
+                    gt_res = extract_beam_parameters(torch.from_numpy(gt_img))
+                    gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(gt_res, dict) else {k: -1.0 for k in PARAM_KEYS}
+                else:
+                    gt_res = extract_beam_parameters(targets[i])
+                    gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(gt_res, dict) else {k: -1.0 for k in PARAM_KEYS}
 
                 # row
                 row = {
@@ -257,14 +271,15 @@ def summarize_error_columns_to_json(df: pd.DataFrame, json_path: str | Path) -> 
 
 def save_single_sample_triplet(
     model: torch.nn.Module,
-    x: torch.Tensor,              # (C,H,W) or (1,C,H,W)
-    y: torch.Tensor,              # (C,H,W) or (1,C,H,W)
+    x: torch.Tensor,              # (C,H,W) or (1,C,H,W) or (N,) for flattened
+    y: torch.Tensor,              # (C,H,W) or (1,C,H,W) or (N,) for flattened
     device: str | torch.device,
     out_dir: str | Path = "results/single_sample",
     prefix: str = "index",        # files: index_0_input.png, index_1_target.png, index_2_pred.png
     channel: int = 0,             # which channel to visualize if multi-channel
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
+    mode: str = "img2img",       # add mode argument
 ) -> None:
     model.eval()
     out_dir = Path(out_dir)
@@ -272,11 +287,15 @@ def save_single_sample_triplet(
 
     def _to_2d(t: torch.Tensor):
         t = t.detach().cpu()
+        if mode == "flattened":
+            arr = t.reshape(-1).numpy()
+            side = int(np.sqrt(arr.shape[0]))
+            return arr.reshape(side, side)
         if t.ndim == 3:   # (C,H,W)
             return t[channel].numpy()
         if t.ndim == 2:   # (H,W)
             return t.numpy()
-        raise TypeError(f"Expected (C,H,W) or (H,W), got {tuple(t.shape)}")
+        raise TypeError(f"Expected (C,H,W), (H,W), or flattened, got {tuple(t.shape)}")
 
     def _save(arr2d, path):
         fig, ax = plt.subplots(figsize=(6, 6))   # 1:1
@@ -286,12 +305,17 @@ def save_single_sample_triplet(
         plt.close(fig)
 
     with torch.no_grad():
-        xin = x.to(device).float()
-        xbat = xin if xin.ndim == 4 else xin.unsqueeze(0)   # (1,C,H,W)
-        pred = model(xbat)[0]                               # (C,H,W)
+        if mode == "flattened":
+            xin = x.to(device).float().reshape(-1)
+            xbat = xin.unsqueeze(0)  # (1,N)
+            pred = model(xbat)[0]    # (N,)
+        else:
+            xin = x.to(device).float()
+            xbat = xin if xin.ndim == 4 else xin.unsqueeze(0)   # (1,C,H,W)
+            pred = model(xbat)[0]                               # (C,H,W)
 
-    x_img    = _to_2d(x[0] if x.ndim == 4 else x)
-    y_img    = _to_2d(y[0] if y.ndim == 4 else y)
+    x_img    = _to_2d(x[0] if (x.ndim == 4 and mode != "flattened") else x)
+    y_img    = _to_2d(y[0] if (y.ndim == 4 and mode != "flattened") else y)
     pred_img = _to_2d(pred)
 
     _save(x_img,    out_dir / f"{prefix}_0_input.png")
