@@ -109,14 +109,9 @@ def evaluate_to_csv(
     device: torch.device | str,
     extract_beam_parameters,     # returns dict or None
     mode: str,                   # "img2img" or "regression"
-    csv_path: str | Path,
-    save: bool = True,
 ) -> pd.DataFrame:
     model.eval()
     rows = []
-    csv_path = Path(csv_path)
-    if save:
-        csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     with torch.no_grad():
         for inputs, targets in tqdm(test_loader, desc="Evaluating", unit="batch", dynamic_ncols=True):
@@ -153,9 +148,6 @@ def evaluate_to_csv(
                 rows.append(row)
 
     df = pd.DataFrame(rows)
-    if save:
-        df.to_csv(csv_path, index=False)
-        print(f"[OK] {len(df)} rows -> {csv_path}")
     return df
  
 
@@ -196,3 +188,70 @@ def add_beamparam_metrics(df: pd.DataFrame, metrics=('RMSE','MSE','MAE')) -> pd.
         out.loc[(out[cols] == -1).any(axis=1), mean_col] = -1.0
 
     return out
+
+
+def add_extraction_state_and_thresholds(
+    df: pd.DataFrame,
+    thresholds: dict[str, float] | None = None,  # e.g. {"MAE": 0.05, "RMSE": 0.08}
+) -> pd.DataFrame:
+    out = df.copy()
+
+    # Detect parameter bases from "<p>" and matching "<p>_pred"
+    params = [c for c in out.columns if not c.endswith("_pred") and f"{c}_pred" in out.columns]
+    if not params:
+        return out  # nothing to do
+
+    gt_cols   = params
+    pred_cols = [f"{p}_pred" for p in params]
+
+    # Extraction states: 1 if all four are valid (!=-1), else 0
+    out["ground_truth_extraction_state"] = (out[gt_cols]   != -1).all(axis=1).astype(int)
+    out["prediction_extraction_state"]   = (out[pred_cols] != -1).all(axis=1).astype(int)
+
+    # Threshold fails on per-row metric means (if present), e.g., "RMSE_mean"
+    if thresholds:
+        for m, thr in thresholds.items():
+            m_up = m.upper()
+            mean_col = f"{m_up}_mean"
+            if mean_col in out.columns:
+                out[f"{m_up}_threshold_fail"] = (out[mean_col] > float(thr)).astype(int)
+
+    return out
+
+
+def summarize_error_columns_to_json(df: pd.DataFrame, json_path: str | Path) -> pd.DataFrame:
+    json_path = Path(json_path)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # rows to keep: both extraction states == 1 (if present)
+    mask = pd.Series(True, index=df.index)
+    if "ground_truth_extraction_state" in df.columns:
+        mask &= df["ground_truth_extraction_state"] == 1
+    if "prediction_extraction_state" in df.columns:
+        mask &= df["prediction_extraction_state"] == 1
+    dff = df[mask]
+
+    # exclude original params, their _pred, extraction/threshold flags
+    exclude = set(PARAM_KEYS + [f"{k}_pred" for k in PARAM_KEYS] + [
+        "ground_truth_extraction_state",
+        "prediction_extraction_state",
+    ])
+    candidates = [
+        c for c in dff.columns
+        if c not in exclude
+        and not c.endswith("_threshold_fail")
+        and "extraction_state" not in c
+        and pd.api.types.is_numeric_dtype(dff[c])
+    ]
+
+    stats = {}
+    for c in candidates:
+        col = dff[c]
+        n_valid = col.notna().sum()
+        stats[f"{c}_avg"] = float(col.mean()) if n_valid > 0 else None
+        stats[f"{c}_std"]  = float(col.std(ddof=1)) if n_valid > 1 else None
+
+    with open(json_path, "w") as f:
+        json.dump(stats, f, indent=2)
+
+    return df
