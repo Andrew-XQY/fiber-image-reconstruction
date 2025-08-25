@@ -148,7 +148,7 @@ PARAM_KEYS = ["h_centroid", "v_centroid", "h_width", "v_width"]
 
 def evaluate_to_df(
     model: torch.nn.Module,
-    test_loader,                 # yields (inputs, targets), both (B,C,H,W)
+    test_loader,                 # yields (inputs, targets) OR (inputs, params, targets) when mode='regression'
     device: torch.device | str,
     extract_beam_parameters,     # returns dict or None
     mode: str,                   # "img2img" or "regression" or "flattened"
@@ -156,8 +156,27 @@ def evaluate_to_df(
     model.eval()
     rows = []
 
+    def _vec_to_params(x):
+        if isinstance(x, torch.Tensor):
+            v = x.reshape(-1).detach().cpu().tolist()
+        else:
+            v = list(x)
+        return {
+            "h_centroid": v[0] if len(v) > 0 else -1.0,
+            "v_centroid": v[1] if len(v) > 1 else -1.0,
+            "h_width":    v[2] if len(v) > 2 else -1.0,
+            "v_width":    v[3] if len(v) > 3 else -1.0,
+        }
+
     with torch.no_grad():
-        for inputs, targets in tqdm(test_loader, desc="Evaluating", unit="batch", dynamic_ncols=True):
+        for batch in tqdm(test_loader, desc="Evaluating", unit="batch", dynamic_ncols=True):
+            # Support (inputs, targets) and (inputs, params, targets) in regression mode
+            if mode == "regression" and isinstance(batch, (tuple, list)) and len(batch) == 3:
+                inputs, params, targets = batch
+            else:
+                inputs, targets = batch
+                params = None
+
             inputs  = inputs.to(device).float()
             targets = targets.to(device).float()
             outputs = model(inputs)
@@ -169,15 +188,8 @@ def evaluate_to_df(
                     pred_res = extract_beam_parameters(outputs[i])
                     pred_vals = {k: pred_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(pred_res, dict) else {k: -1.0 for k in PARAM_KEYS}
                 elif mode == "regression":
-                    vec = outputs[i].reshape(-1).detach().cpu().tolist()
-                    pred_vals = {
-                        "h_centroid": vec[0] if len(vec) > 0 else -1.0,
-                        "v_centroid": vec[1] if len(vec) > 1 else -1.0,
-                        "h_width":    vec[2] if len(vec) > 2 else -1.0,
-                        "v_width":    vec[3] if len(vec) > 3 else -1.0,
-                    }
+                    pred_vals = _vec_to_params(outputs[i])
                 elif mode == "flattened":
-                    # Assume output and target are 1D flattened square images
                     pred_vec = outputs[i].reshape(-1).detach().cpu().numpy()
                     side = int(np.sqrt(pred_vec.shape[0]))
                     pred_img = pred_vec.reshape(side, side)
@@ -186,26 +198,27 @@ def evaluate_to_df(
                 else:
                     raise ValueError("mode must be 'img2img', 'regression', or 'flattened'")
 
-                # ground truth params (from target image)
+                # ground truth params
                 if mode == "flattened":
                     gt_vec = targets[i].reshape(-1).detach().cpu().numpy()
                     side = int(np.sqrt(gt_vec.shape[0]))
                     gt_img = gt_vec.reshape(side, side)
                     gt_res = extract_beam_parameters(torch.from_numpy(gt_img))
                     gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(gt_res, dict) else {k: -1.0 for k in PARAM_KEYS}
+                elif mode == "regression" and params is not None:
+                    gt_vals = _vec_to_params(params[i])
                 else:
                     gt_res = extract_beam_parameters(targets[i])
                     gt_vals = {k: gt_res.get(k, -1.0) for k in PARAM_KEYS} if isinstance(gt_res, dict) else {k: -1.0 for k in PARAM_KEYS}
 
-                # row
-                row = {
+                rows.append({
                     **gt_vals,
                     **{f"{k}_pred": v for k, v in pred_vals.items()},
-                }
-                rows.append(row)
+                })
 
     df = pd.DataFrame(rows)
     return df
+
  
 
 def add_beamparam_metrics(df: pd.DataFrame, metrics=('RMSE','MSE','MAE')) -> pd.DataFrame:
@@ -420,3 +433,124 @@ def plot_sanity(df: pd.DataFrame, bins: int = 50, save_dir: str | Path | None = 
     plt.close(fig2)
     
     
+def plot_history_curves(folder: str,
+                        metrics: str,
+                        out_dir: str = "results/plots",
+                        epoch_range: list[int] | tuple[int, int] | None = None,
+                        smooth: bool = False) -> str:
+    """
+    Group *_history.json by the first token before '-'. For each group, compute an epoch-wise
+    average of `metrics` across runs (using only runs that contain that epoch). Plot ONE line per group.
+
+    Args:
+        folder: Directory containing files like Pix2pix-YYYYmmddHHMMSS_history.json
+        metrics: JSON key to plot (e.g., "val_overall_mae")
+        out_dir: Output directory for the PDF
+        epoch_range: Optional [start_idx, end_idx] (0-based, inclusive). If None, plot full length.
+        smooth: If True, plot a smoothed curve (moving average); otherwise plot raw line.
+
+    Returns:
+        Path to the saved PDF.
+    """
+    def _smooth_same(y: np.ndarray) -> np.ndarray:
+        """Moving average with 'same' length, NaN-aware, odd window."""
+        y = np.asarray(y, dtype=float)
+        n = len(y)
+        if n < 3:
+            return y
+        # choose an odd window ~ n/20, clipped to [3, n or n-1]
+        w = max(3, int(round(n / 20)) or 3)
+        if w % 2 == 0:
+            w += 1
+        if w >= n:
+            w = n-1 if n % 2 == 0 else n
+        if w < 3:
+            return y
+        kernel = np.ones(w, dtype=float)
+        good = np.isfinite(y).astype(float)
+        y_filled = np.where(np.isfinite(y), y, 0.0)
+        num = np.convolve(y_filled, kernel, mode="same")
+        den = np.convolve(good, kernel, mode="same")
+        out = np.divide(num, den, out=np.full_like(num, np.nan), where=den > 0)
+        return out
+
+    folder_path = Path(folder)
+    files = sorted(folder_path.glob("*_history.json"))
+    if not files:
+        raise FileNotFoundError(f"No *_history.json files found in: {folder_path}")
+
+    APS_COLORS = [
+        "#4477AA", "#EE6677", "#228833", "#CCBB44", "#66CCEE",
+        "#AA3377", "#BBBBBB", "#000000", "#44AA99", "#FFA500",
+        "#332288", "#88CCEE"
+    ]
+
+    # Collect metric sequences by model prefix
+    groups: dict[str, list[list[float]]] = {}
+    for f in files:
+        name = f.stem  # e.g., "Pix2pix-20250825203106_history"
+        model = name.split("-")[0] if "-" in name else name.replace("_history", "")
+        try:
+            with open(f, "r") as fh:
+                data = json.load(fh)
+        except Exception as e:
+            print(f"[skip] Failed to read {f.name}: {e}")
+            continue
+
+        seq = data.get(metrics, None)
+        if isinstance(seq, list) and len(seq) > 0:
+            groups.setdefault(model, []).append(seq)
+        else:
+            print(f"[skip] '{metrics}' not found or empty in {f.name}")
+
+    if not groups:
+        raise ValueError(f"No valid '{metrics}' series found in: {folder_path}")
+
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    pdf_path = out_path / f"{metrics}.pdf"
+
+    plt.figure(figsize=(6, 4))
+
+    for i, (model, seqs) in enumerate(groups.items()):
+        # Epoch-wise average (use only runs that have t)
+        max_len = max(len(s) for s in seqs)
+        mean_curve = []
+        for t in range(max_len):
+            vals = []
+            for s in seqs:
+                if t < len(s) and s[t] is not None:
+                    try:
+                        vals.append(float(s[t]))
+                    except (TypeError, ValueError):
+                        pass
+            mean_curve.append(np.mean(vals) if vals else np.nan)
+
+        # Apply epoch_range slicing (0-based, inclusive)
+        if epoch_range is not None:
+            start = max(0, int(epoch_range[0]))
+            end = min(max_len - 1, int(epoch_range[1]))
+            if start > end:
+                raise ValueError(f"Invalid epoch_range: start {start} > end {end}")
+        else:
+            start, end = 0, max_len - 1
+
+        y = np.array(mean_curve[start:end + 1], dtype=float)
+        if smooth:
+            y = _smooth_same(y)
+        x = np.arange(start + 1, end + 1 + 1)  # show epochs as 1-based on x-axis
+
+        color = APS_COLORS[i % len(APS_COLORS)]
+        plt.plot(x, y, label=model, linewidth=1.8, color=color)
+
+    plt.xlabel("Epoch")
+    plt.ylabel(metrics)
+    plt.title(metrics)
+    # grid OFF; legend without frame
+    if len(groups) > 1:
+        plt.legend(loc="best", fontsize=8, frameon=False)
+    plt.tight_layout()
+    plt.savefig(pdf_path, bbox_inches="tight")
+    plt.close()
+
+    return str(pdf_path)
