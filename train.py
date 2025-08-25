@@ -105,14 +105,13 @@ elif experiment_name == "U_Net":
     from models.U_Net import UNet
     model = UNet(
         in_channels=config["model"]["in_channels"],
+        encoder=config["model"]["encoder"],
+        decoder=config["model"]["decoder"],
+        kernel_size=config["model"]["kernel_size"],
+        apply_batchnorm=config["model"]["apply_batchnorm"],
+        apply_dropout=config["model"]["apply_dropout"],
         out_channels=config["model"]["out_channels"],
-        enc_channels=config["model"]["enc_channels"],
-        dec_channels=config["model"]["dec_channels"],
-        bottleneck_channels=config["model"]["bottleneck_channels"],
-        use_skips=config["model"]["use_skips"],
-        use_batchnorm=config["model"]["use_batchnorm"],
-        act=config["model"]["act"],
-        use_sigmoid=config["model"]["use_sigmoid"],
+        final_activation=config["model"]["final_activation"],
     )
 elif experiment_name == "SwinT":
     from models.SwinT import SwinUNet

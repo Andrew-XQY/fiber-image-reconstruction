@@ -43,7 +43,8 @@ class Downsample(nn.Module):
         super().__init__()
         p = _same_pad_stride2_for_k4(k)
         layers: List[nn.Module] = [
-            nn.Conv2d(in_ch, out_ch, kernel_size=k, stride=2, padding=p, bias=False)
+            # nn.Conv2d(in_ch, out_ch, kernel_size=k, stride=2, padding=p, bias=False)
+            nn.Conv2d(in_ch, out_ch, k, stride=2, padding=p, bias=(not apply_batchnorm))
         ]
         if apply_batchnorm:
             layers.append(nn.BatchNorm2d(out_ch))
@@ -54,18 +55,28 @@ class Downsample(nn.Module):
         return self.net(x)
 
 class Upsample(nn.Module):
-    """ConvTranspose → BN → (Dropout) → ReLU, stride=2."""
-    def __init__(self, in_ch: int, out_ch: int, k: int = 4, apply_dropout: bool = False):
+    def __init__(self, in_ch, out_ch, k=4, apply_dropout=False, mode="resize_conv", norm="in"):
         super().__init__()
-        p = _same_pad_stride2_for_k4(k)
-        layers: List[nn.Module] = [
-            nn.ConvTranspose2d(in_ch, out_ch, kernel_size=k, stride=2, padding=p, bias=False),
-            nn.BatchNorm2d(out_ch),
-        ]
-        if apply_dropout:
-            layers.append(nn.Dropout(0.5))
-        layers.append(nn.ReLU(inplace=True))
-        self.net = nn.Sequential(*layers)
+
+        def _norm(ch):
+            return nn.InstanceNorm2d(ch, affine=True, track_running_stats=False) if norm=="in" else nn.BatchNorm2d(ch)
+
+        if mode == "resize_conv":
+            self.net = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="nearest"),
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=1, padding=1, bias=False),
+                _norm(out_ch),
+                nn.Dropout(0.5) if apply_dropout else nn.Identity(),
+                nn.ReLU(inplace=True),
+            )
+        else:
+            p = _same_pad_stride2_for_k4(k)
+            self.net = nn.Sequential(
+                nn.ConvTranspose2d(in_ch, out_ch, kernel_size=k, stride=2, padding=p, bias=False),
+                _norm(out_ch),
+                nn.Dropout(0.5) if apply_dropout else nn.Identity(),
+                nn.ReLU(inplace=True),
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
@@ -133,7 +144,9 @@ class GeneratorUNet(nn.Module):
         cur_in = enc[-1]  # bottleneck channels
         for i in range(num_ups):
             out_ch = decoder[i]
-            ups.append(Upsample(cur_in, out_ch, k=k, apply_dropout=(i in (dropout_up_idx or []))))
+            # ups.append(Upsample(cur_in, out_ch, k=k, apply_dropout=(i in (dropout_up_idx or []))))
+            ups.append(Upsample(cur_in, out_ch, k=k, apply_dropout=(i in (dropout_up_idx or [])),
+                    mode="resize_conv", norm="in"))
             # after upsample, if we use skips the next in_ch includes concatenation
             cur_in = out_ch + (skip_chs[i] if use_skips else 0)
         self.ups = nn.ModuleList(ups)
@@ -217,6 +230,7 @@ class PatchDiscriminator(nn.Module):
 
         self.net = nn.Sequential(
             # down1: no BN
+            # nn.Conv2d(ch_in, 64, kernel_size=k, stride=2, padding=p, bias=True),
             nn.Conv2d(ch_in, 64, kernel_size=k, stride=2, padding=p, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
 
@@ -305,61 +319,3 @@ class Pix2PixLosses(nn.Module):
         real_loss = self.adv(disc_real_logits, torch.ones_like(disc_real_logits))
         fake_loss = self.adv(disc_fake_logits, torch.zeros_like(disc_fake_logits))
         return real_loss + fake_loss
-
-# ------------------------- Optional wrapper -------------------------
-
-class Pix2Pix(nn.Module):
-    """
-    Convenience wrapper that *contains* G and D for training.
-    Practitioners usually keep G and D as separate modules; this just bundles them.
-    """
-    def __init__(
-        self,
-        gen_hparams: Dict[str, Any],
-        disc_hparams: Dict[str, Any],
-        lambda_l1: float = 100.0,
-    ):
-        super().__init__()
-        self.generator = GeneratorUNet(**gen_hparams)
-        self.discriminator = PatchDiscriminator(**disc_hparams)
-        self.losses = Pix2PixLosses(lambda_l1=lambda_l1)
-        self.hparams = dict(gen_hparams=gen_hparams, disc_hparams=disc_hparams, lambda_l1=lambda_l1)
-
-    @torch.no_grad()
-    def infer(self, x: torch.Tensor) -> torch.Tensor:
-        self.generator.eval()
-        return self.generator(x)
-
-    def save_model(self, save_dir: str, model_name: str = "model") -> str:
-        os.makedirs(save_dir, exist_ok=True)
-        path = os.path.join(save_dir, f"{model_name}.pth")
-        payload = {
-            "class": self.__class__.__name__,
-            "hparams": self.hparams,
-            "gen_state": self.generator.state_dict(),
-            "disc_state": self.discriminator.state_dict(),
-            "pytorch_version": torch.__version__,
-        }
-        torch.save(payload, path)
-        return path
-
-    @classmethod
-    def load_model(
-        cls,
-        filepath: str,
-        device: Optional[Union[str, torch.device]] = None,
-        eval_mode: bool = True,
-    ) -> "Pix2Pix":
-        map_location = torch.device(device) if isinstance(device, str) else device
-        payload = torch.load(filepath, map_location=map_location)
-        m = cls(**payload["hparams"])
-        m.generator.load_state_dict(payload["gen_state"], strict=True)
-        m.discriminator.load_state_dict(payload["disc_state"], strict=True)
-        if map_location is not None:
-            m.to(map_location)
-        if eval_mode:
-            m.eval()
-        return m
-
-# path = gen.save_model(config["paths"]["output"], "generator")
-# gen2 = GeneratorUNet.load_model(path, device=device)

@@ -16,15 +16,14 @@ training:
   batch_size: &batch 16                   # Number of samples per gradient update
 
 model:
-  in_channels: 1                          # input channels (1=grayscale, 3=RGB, etc.)
-  out_channels: 1                         # output channels (e.g., 1 for regression/map)
-  enc_channels: [64, 128, 256]   # encoder widths at each downsampling step   [32, 64, 128, 256, 512]
-  dec_channels: [64, 128, 256]   # decoder widths at each upsampling step
-  bottleneck_channels: 512               # channels at the bottleneck (deepest layer)
-  use_skips: False
-  use_batchnorm: True
-  act: "leaky_relu"
-  use_sigmoid: False
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,  128, 128, 256, 512, 512]
+  decoder:          [512, 512, 256, 128, 128, 64 ]
+  apply_batchnorm:  [0,   1,   1,   1,   1,   1  ]
+  apply_dropout:    [1,   1,   0,   0,   0,   0  ]
+  final_activation: sigmoid
 
 data:
   subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
