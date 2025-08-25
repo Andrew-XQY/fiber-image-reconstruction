@@ -7,10 +7,55 @@ import matplotlib.pyplot as plt
 import torch
 from pathlib import Path
 import pandas as pd
+import shutil
 
 from tqdm.auto import tqdm
 from typing import Dict, Any, Tuple, List, Optional
 from utils import SAMPLE_FLATTENED, REGRESSION, GAN 
+
+def collect_and_copy_by_keyword(src_dir: str | os.PathLike,
+                                dst_dir: str | os.PathLike,
+                                keyword: str,
+                                case_sensitive: bool = False) -> List[Tuple[Path, Path]]:
+    """
+    Recursively scan `src_dir` for files whose *basename* contains `keyword`,
+    and copy each match into `dst_dir` named as:
+        <parent-folder-name>_<original-filename>
+
+    - Only the final path component (filename) is matched.
+    - Matching is case-insensitive by default (set `case_sensitive=True` to disable).
+    - If a destination filename already exists, it will be overwritten.
+    - Returns a list of (source_path, destination_path) for all copied files.
+    """
+    src = Path(src_dir).expanduser().resolve()
+    dst = Path(dst_dir).expanduser().resolve()
+
+    if not src.exists() or not src.is_dir():
+        raise ValueError(f"Source directory does not exist or is not a directory: {src}")
+    dst.mkdir(parents=True, exist_ok=True)
+
+    if not keyword:
+        raise ValueError("`keyword` must be a non-empty string.")
+
+    needle = keyword if case_sensitive else keyword.lower()
+
+    copied: List[Tuple[Path, Path]] = []
+    for root, _, files in os.walk(src, followlinks=False):
+        root_path = Path(root)
+        parent_name = root_path.name if root_path != src else src.name
+
+        for fname in files:
+            hay = fname if case_sensitive else fname.lower()
+            if needle in hay:  # match on basename only
+                src_path = root_path / fname
+                dst_path = dst / f"{parent_name}_{fname}"
+
+                if src_path.is_file():
+                    shutil.copy2(src_path, dst_path)  # overwrite if exists
+                    copied.append((src_path, dst_path))
+
+    return copied
+
 
 def log_scale_lists(lists):
     """Log-scale each list in lists based on common min-max."""
@@ -101,7 +146,7 @@ def list_subfolders_abs(dir_path):
 PARAM_KEYS = ["h_centroid", "v_centroid", "h_width", "v_width"]
 
 
-def evaluate_to_csv(
+def evaluate_to_df(
     model: torch.nn.Module,
     test_loader,                 # yields (inputs, targets), both (B,C,H,W)
     device: torch.device | str,
