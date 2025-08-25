@@ -80,9 +80,10 @@ def list_subfolders_abs(dir_path):
     Given a directory path, return a list of absolute paths of all folders directly under that directory.
     """
     abs_dir_path = os.path.abspath(dir_path)
-    return [os.path.join(abs_dir_path, name)
-            for name in os.listdir(abs_dir_path)
-            if os.path.isdir(os.path.join(abs_dir_path, name))]
+    subfolders = [os.path.join(abs_dir_path, name)
+                 for name in os.listdir(abs_dir_path)
+                 if os.path.isdir(os.path.join(abs_dir_path, name))]
+    return sorted(subfolders)
     
     
 
@@ -109,10 +110,13 @@ def evaluate_to_csv(
     extract_beam_parameters,     # returns dict or None
     mode: str,                   # "img2img" or "regression"
     csv_path: str | Path,
+    save: bool = True,
 ) -> pd.DataFrame:
     model.eval()
     rows = []
-    csv_path = Path(csv_path); csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path = Path(csv_path)
+    if save:
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     with torch.no_grad():
         for inputs, targets in tqdm(test_loader, desc="Evaluating", unit="batch", dynamic_ncols=True):
@@ -149,6 +153,46 @@ def evaluate_to_csv(
                 rows.append(row)
 
     df = pd.DataFrame(rows)
-    df.to_csv(csv_path, index=False)
-    print(f"[OK] {len(df)} rows -> {csv_path}")
+    if save:
+        df.to_csv(csv_path, index=False)
+        print(f"[OK] {len(df)} rows -> {csv_path}")
     return df
+ 
+
+def add_beamparam_metrics(df: pd.DataFrame, metrics=('RMSE','MSE','MAE')) -> pd.DataFrame:
+    allowed = {'RMSE','MSE','MAE'}
+    metrics = [m.upper() for m in metrics]
+    if any(m not in allowed for m in metrics):
+        raise ValueError(f"metrics must be subset of {allowed}")
+
+    out = df.copy()
+    params = [c for c in out.columns if not c.endswith('_pred') and f"{c}_pred" in out.columns]
+
+    for p in params:
+        gt = out[p]
+        pr = out[f"{p}_pred"]
+        valid = (gt != -1) & (pr != -1)
+        err = pr - gt
+
+        if 'MSE' in metrics:
+            col = f"{p}_MSE"
+            out[col] = -1.0
+            out.loc[valid, col] = (err.pow(2))[valid]
+
+        if 'RMSE' in metrics:
+            col = f"{p}_RMSE"
+            out[col] = -1.0
+            out.loc[valid, col] = (err.abs())[valid]  # sqrt(MSE) per-sample == |err|
+
+        if 'MAE' in metrics:
+            col = f"{p}_MAE"
+            out[col] = -1.0
+            out.loc[valid, col] = (err.abs())[valid]
+
+    for m in metrics:
+        cols = [f"{p}_{m}" for p in params]
+        mean_col = f"{m}_mean"
+        out[mean_col] = out[cols].mean(axis=1)
+        out.loc[(out[cols] == -1).any(axis=1), mean_col] = -1.0
+
+    return out
