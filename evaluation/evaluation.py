@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from tqdm.auto import tqdm
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 from utils import SAMPLE_FLATTENED, REGRESSION, GAN 
 
 def log_scale_lists(lists):
@@ -254,6 +254,51 @@ def summarize_error_columns_to_json(df: pd.DataFrame, json_path: str | Path) -> 
 
     return df
 
+
+def save_single_sample_triplet(
+    model: torch.nn.Module,
+    x: torch.Tensor,              # (C,H,W) or (1,C,H,W)
+    y: torch.Tensor,              # (C,H,W) or (1,C,H,W)
+    device: str | torch.device,
+    out_dir: str | Path = "results/single_sample",
+    prefix: str = "index",        # files: index_0_input.png, index_1_target.png, index_2_pred.png
+    channel: int = 0,             # which channel to visualize if multi-channel
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+) -> None:
+    model.eval()
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def _to_2d(t: torch.Tensor):
+        t = t.detach().cpu()
+        if t.ndim == 3:   # (C,H,W)
+            return t[channel].numpy()
+        if t.ndim == 2:   # (H,W)
+            return t.numpy()
+        raise TypeError(f"Expected (C,H,W) or (H,W), got {tuple(t.shape)}")
+
+    def _save(arr2d, path):
+        fig, ax = plt.subplots(figsize=(6, 6))   # 1:1
+        ax.imshow(arr2d, cmap="viridis", aspect="equal", vmin=vmin, vmax=vmax)
+        ax.axis("off")
+        fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0)
+        plt.close(fig)
+
+    with torch.no_grad():
+        xin = x.to(device).float()
+        xbat = xin if xin.ndim == 4 else xin.unsqueeze(0)   # (1,C,H,W)
+        pred = model(xbat)[0]                               # (C,H,W)
+
+    x_img    = _to_2d(x[0] if x.ndim == 4 else x)
+    y_img    = _to_2d(y[0] if y.ndim == 4 else y)
+    pred_img = _to_2d(pred)
+
+    _save(x_img,    out_dir / f"{prefix}_0_input.png")
+    _save(y_img,    out_dir / f"{prefix}_1_target.png")
+    _save(pred_img, out_dir / f"{prefix}_2_pred.png")
+
+
 def plot_sanity(df: pd.DataFrame, bins: int = 50, save_dir: str | Path | None = None) -> None:
     save_dir = Path(save_dir) if save_dir is not None else None
     if save_dir is not None:
@@ -304,19 +349,5 @@ def plot_sanity(df: pd.DataFrame, bins: int = 50, save_dir: str | Path | None = 
     if save_dir: fig2.savefig(save_dir / "width_parity.png", dpi=150, bbox_inches="tight")
     else: plt.show()
     plt.close(fig2)
-
-    # 3) Error histograms (square)
-    metric_cols = [c for c in ["RMSE_mean"] if c in df.columns] # "MSE_mean", "MAE_mean"
-    if metric_cols:
-        fig3, ax3 = plt.subplots(figsize=(6, 6))
-        for col in metric_cols:
-            vals = df[col].to_numpy()
-            vals = vals[(vals >= 0) & np.isfinite(vals)]
-            if vals.size:
-                ax3.hist(vals, bins=bins, alpha=0.5, label=col)
-        ax3.set_xlabel("Error"); ax3.set_ylabel("Count"); ax3.set_title("Error distribution")
-        ax3.set_aspect("equal", adjustable="box")
-        ax3.legend(); ax3.grid(alpha=0.3)
-        if save_dir: fig3.savefig(save_dir / "error_histograms.png", dpi=150, bbox_inches="tight")
-        else: plt.show()
-        plt.close(fig3)
+    
+    
