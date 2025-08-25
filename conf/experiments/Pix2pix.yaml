@@ -21,7 +21,7 @@ model:
 training:
   epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
-  batch_size: &batch 1                   # Number of samples per gradient update
+  batch_size: &batch 4                   # Number of samples per gradient update
   betas: [0.9, 0.999]                     # Betas for Adam optimizer
   lr: 2.0e-4
   lambda_l1: 100.0
