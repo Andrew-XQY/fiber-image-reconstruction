@@ -2,6 +2,15 @@ import os
 from xflow.extensions.style.aps import *
 import json
 import numpy as np
+import matplotlib.pyplot as plt
+
+import torch
+from pathlib import Path
+import pandas as pd
+
+from tqdm.auto import tqdm
+from typing import Dict, Any, Tuple, List
+from utils import SAMPLE_FLATTENED, REGRESSION, GAN 
 
 def log_scale_lists(lists):
     """Log-scale each list in lists based on common min-max."""
@@ -87,17 +96,6 @@ def list_subfolders_abs(dir_path):
     
     
 
-
-
-import torch
-import os
-from pathlib import Path
-import pandas as pd
-import numpy as np
-
-from tqdm.auto import tqdm
-from typing import Dict, Any, Tuple, List
-from utils import SAMPLE_FLATTENED, REGRESSION, GAN 
 
 # ---- helpers ---------------------------------------------------------------
 PARAM_KEYS = ["h_centroid", "v_centroid", "h_width", "v_width"]
@@ -255,3 +253,70 @@ def summarize_error_columns_to_json(df: pd.DataFrame, json_path: str | Path) -> 
         json.dump(stats, f, indent=2)
 
     return df
+
+def plot_sanity(df: pd.DataFrame, bins: int = 50, save_dir: str | Path | None = None) -> None:
+    save_dir = Path(save_dir) if save_dir is not None else None
+    if save_dir is not None:
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+    def _scatter_pair(ax, x, y, label, color):
+        m = (x != -1) & (y != -1) & np.isfinite(x) & np.isfinite(y)
+        ax.scatter(x[m], y[m], s=10, alpha=0.7, label=label, c=color)
+
+    # 1) Centroid parity (square)
+    fig1, ax1 = plt.subplots(figsize=(6, 6))
+    x_hc, y_hc = df["h_centroid"].to_numpy(), df["h_centroid_pred"].to_numpy()
+    x_vc, y_vc = df["v_centroid"].to_numpy(), df["v_centroid_pred"].to_numpy()
+
+    _scatter_pair(ax1, x_hc, y_hc, "h_centroid", "blue")
+    _scatter_pair(ax1, x_vc, y_vc, "v_centroid", "gold")
+
+    all_x = np.concatenate([x_hc[np.isfinite(x_hc)], x_vc[np.isfinite(x_vc)]]) if len(df) else np.array([0,1])
+    all_y = np.concatenate([y_hc[np.isfinite(y_hc)], y_vc[np.isfinite(y_vc)]]) if len(df) else np.array([0,1])
+    mask_valid = (all_x != -1) & (all_y != -1)
+    lo = float(min(all_x[mask_valid].min(), all_y[mask_valid].min())) if mask_valid.any() else 0.0
+    hi = float(max(all_x[mask_valid].max(), all_y[mask_valid].max())) if mask_valid.any() else 1.0
+    ax1.plot([lo, hi], [lo, hi], "--", linewidth=1)
+    ax1.set_xlabel("Ground truth"); ax1.set_ylabel("Prediction"); ax1.set_title("Centroid parity")
+    ax1.set_xlim(lo, hi); ax1.set_ylim(lo, hi); ax1.set_aspect("equal", adjustable="box")
+    ax1.legend(); ax1.grid(alpha=0.3)
+    if save_dir: fig1.savefig(save_dir / "centroid_parity.png", dpi=150, bbox_inches="tight")
+    else: plt.show()
+    plt.close(fig1)
+
+    # 2) Width parity (square)
+    fig2, ax2 = plt.subplots(figsize=(6, 6))
+    x_hw, y_hw = df["h_width"].to_numpy(), df["h_width_pred"].to_numpy()
+    x_vw, y_vw = df["v_width"].to_numpy(), df["v_width_pred"].to_numpy()
+
+    _scatter_pair(ax2, x_hw, y_hw, "h_width", "blue")
+    _scatter_pair(ax2, x_vw, y_vw, "v_width", "gold")
+
+    all_x = np.concatenate([x_hw[np.isfinite(x_hw)], x_vw[np.isfinite(x_vw)]]) if len(df) else np.array([0,1])
+    all_y = np.concatenate([y_hw[np.isfinite(y_hw)], y_vw[np.isfinite(y_vw)]]) if len(df) else np.array([0,1])
+    mask_valid = (all_x != -1) & (all_y != -1)
+    lo = float(min(all_x[mask_valid].min(), all_y[mask_valid].min())) if mask_valid.any() else 0.0
+    hi = float(max(all_x[mask_valid].max(), all_y[mask_valid].max())) if mask_valid.any() else 1.0
+    ax2.plot([lo, hi], [lo, hi], "--", linewidth=1)
+    ax2.set_xlabel("Ground truth"); ax2.set_ylabel("Prediction"); ax2.set_title("Width parity")
+    ax2.set_xlim(lo, hi); ax2.set_ylim(lo, hi); ax2.set_aspect("equal", adjustable="box")
+    ax2.legend(); ax2.grid(alpha=0.3)
+    if save_dir: fig2.savefig(save_dir / "width_parity.png", dpi=150, bbox_inches="tight")
+    else: plt.show()
+    plt.close(fig2)
+
+    # 3) Error histograms (square)
+    metric_cols = [c for c in ["RMSE_mean"] if c in df.columns] # "MSE_mean", "MAE_mean"
+    if metric_cols:
+        fig3, ax3 = plt.subplots(figsize=(6, 6))
+        for col in metric_cols:
+            vals = df[col].to_numpy()
+            vals = vals[(vals >= 0) & np.isfinite(vals)]
+            if vals.size:
+                ax3.hist(vals, bins=bins, alpha=0.5, label=col)
+        ax3.set_xlabel("Error"); ax3.set_ylabel("Count"); ax3.set_title("Error distribution")
+        ax3.set_aspect("equal", adjustable="box")
+        ax3.legend(); ax3.grid(alpha=0.3)
+        if save_dir: fig3.savefig(save_dir / "error_histograms.png", dpi=150, bbox_inches="tight")
+        else: plt.show()
+        plt.close(fig3)
