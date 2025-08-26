@@ -649,8 +649,8 @@ def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str):
     ax.boxplot(data, labels=models, showmeans=True)
     ax.set_xlabel("Model")
     ax.set_ylabel(metric)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.tick_params(direction="in", top=False, right=False)
     fig.tight_layout()
 
@@ -728,9 +728,9 @@ def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_di
     ax.set_ylabel("Metric value")
     ax.legend(frameon=False)
 
-    # APS-like minimal style
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    # Full rectangular boundary box
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.tick_params(direction="in", top=False, right=False)
     fig.tight_layout()
 
