@@ -1,5 +1,7 @@
+import os
 import torch
 import torch.nn as nn
+from typing import Optional, Union
 
 # -------------------------
 # Helpers / weight init
@@ -100,6 +102,34 @@ class Generator(nn.Module):
 
         # Final up to 256x256
         return self.last(x)
+    
+    def save_model(self, save_dir: str, model_name: str = "model") -> str:
+        """Save state_dict and minimal init kwargs (channels). Returns the file path."""
+        os.makedirs(save_dir, exist_ok=True)
+        # infer channels from first conv in the down stack
+        channels = int(self.down_stack[0].conv.in_channels)
+        payload = {
+            "class_name": self.__class__.__name__,
+            "init_kwargs": {"channels": channels},
+            "state_dict": self.state_dict(),
+            "torch_version": torch.__version__,
+        }
+        filepath = os.path.join(save_dir, f"{model_name}.pth")
+        torch.save(payload, filepath)
+        return filepath
+
+    @classmethod
+    def load_model(cls, filepath: str, device: Optional[Union[str, torch.device]] = None):
+        """Load a saved model file produced by save_model()."""
+        dev = torch.device(device) if device is not None else torch.device("cpu")
+        package = torch.load(filepath, map_location=dev)
+        if package.get("class_name") != cls.__name__:
+            raise ValueError(f"File was saved from {package.get('class_name')}, not {cls.__name__}")
+        model = cls(**package["init_kwargs"])
+        model.load_state_dict(package["state_dict"])
+        model.to(dev)
+        return model
+
 
 # -------------------------
 # Discriminator (PatchGAN)
@@ -138,6 +168,35 @@ class Discriminator(nn.Module):
         x = self.act(x)
         x = self.pad2(x)
         return self.last(x)
+    
+    def save_model(self, save_dir: str, model_name: str = "model") -> str:
+        """Save state_dict and minimal init kwargs (channels). Returns the file path."""
+        os.makedirs(save_dir, exist_ok=True)
+        # in_channels of first layer is 2 * channels (inp + tar)
+        in_ch = int(self.down1.conv.in_channels)
+        channels = in_ch // 2
+        payload = {
+            "class_name": self.__class__.__name__,
+            "init_kwargs": {"channels": channels},
+            "state_dict": self.state_dict(),
+            "torch_version": torch.__version__,
+        }
+        filepath = os.path.join(save_dir, f"{model_name}.pth")
+        torch.save(payload, filepath)
+        return filepath
+
+    @classmethod
+    def load_model(cls, filepath: str, device: Optional[Union[str, torch.device]] = None):
+        """Load a saved model file produced by save_model()."""
+        dev = torch.device(device) if device is not None else torch.device("cpu")
+        package = torch.load(filepath, map_location=dev)
+        if package.get("class_name") != cls.__name__:
+            raise ValueError(f"File was saved from {package.get('class_name')}, not {cls.__name__}")
+        model = cls(**package["init_kwargs"])
+        model.load_state_dict(package["state_dict"])
+        model.to(dev)
+        return model
+
 
 # -------------------------
 # (Optional) Losses to mirror your TF code exactly
