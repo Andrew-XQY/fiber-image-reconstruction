@@ -2,7 +2,7 @@
 # Signle Hidden Layer Dense Neural Network fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 42 # 42, 168, 500
+seed: &seed 4399 # 42, 168, 500
 name: &config "SHL_DNN.yaml"
 framework: "pytorch"
 
