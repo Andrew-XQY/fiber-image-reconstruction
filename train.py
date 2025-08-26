@@ -125,8 +125,8 @@ elif experiment_name == "Pix2pix":
     G = Generator(channels=config["model"]["channels"])
     D = Discriminator(channels=config["model"]["channels"])
     losses = Pix2PixLosses(lambda_l1=config["model"]["lambda_l1"])
-    opt_g = torch.optim.Adam(G.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
-    opt_d = torch.optim.Adam(D.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
+    opt_g = torch.optim.Adam(G.parameters(), lr=config["training"]["learning_rate"], betas=config["training"]["betas"])
+    opt_d = torch.optim.Adam(D.parameters(), lr=config["training"]["learning_rate"], betas=config["training"]["betas"])
 elif experiment_name == "ERN":
     from models.ERN import EncoderRegressor
     model = EncoderRegressor(
