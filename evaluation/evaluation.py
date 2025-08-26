@@ -8,9 +8,10 @@ import torch
 from pathlib import Path
 import pandas as pd
 import shutil
+import math
 
 from tqdm.auto import tqdm
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, List, Optional, Mapping, Union
 from utils import SAMPLE_FLATTENED, REGRESSION, GAN 
 
 def collect_and_copy_by_keyword(src_dir: str | os.PathLike,
@@ -221,41 +222,75 @@ def evaluate_to_df(
 
  
 
+# def add_beamparam_metrics(df: pd.DataFrame, metrics=('RMSE','MSE','MAE')) -> pd.DataFrame:
+#     allowed = {'RMSE','MSE','MAE'}
+#     metrics = [m.upper() for m in metrics]
+#     if any(m not in allowed for m in metrics):
+#         raise ValueError(f"metrics must be subset of {allowed}")
+
+#     out = df.copy()
+#     params = [c for c in out.columns if not c.endswith('_pred') and f"{c}_pred" in out.columns]
+
+#     for p in params:
+#         gt = out[p]
+#         pr = out[f"{p}_pred"]
+#         valid = (gt != -1) & (pr != -1)
+#         err = pr - gt
+
+#         if 'MSE' in metrics:
+#             col = f"{p}_MSE"
+#             out[col] = -1.0
+#             out.loc[valid, col] = (err.pow(2))[valid]
+
+#         if 'RMSE' in metrics:
+#             col = f"{p}_RMSE"
+#             out[col] = -1.0
+#             out.loc[valid, col] = (err.abs())[valid]  # sqrt(MSE) per-sample == |err|
+
+#         if 'MAE' in metrics:
+#             col = f"{p}_MAE"
+#             out[col] = -1.0
+#             out.loc[valid, col] = (err.abs())[valid]
+
+#     for m in metrics:
+#         cols = [f"{p}_{m}" for p in params]
+#         mean_col = f"{m}_mean"
+#         out[mean_col] = out[cols].mean(axis=1)
+#         out.loc[(out[cols] == -1).any(axis=1), mean_col] = -1.0
+
+#     return out
+
 def add_beamparam_metrics(df: pd.DataFrame, metrics=('RMSE','MSE','MAE')) -> pd.DataFrame:
-    allowed = {'RMSE','MSE','MAE'}
+    import numpy as np
+    out = df.copy()
     metrics = [m.upper() for m in metrics]
+    allowed = {'RMSE','MSE','MAE'}
     if any(m not in allowed for m in metrics):
         raise ValueError(f"metrics must be subset of {allowed}")
 
-    out = df.copy()
     params = [c for c in out.columns if not c.endswith('_pred') and f"{c}_pred" in out.columns]
 
     for p in params:
-        gt = out[p]
-        pr = out[f"{p}_pred"]
+        gt = out[p].astype(float)
+        pr = out[f"{p}_pred"].astype(float)
         valid = (gt != -1) & (pr != -1)
         err = pr - gt
-
+        # per-parameter errors (use NaN for invalid)
         if 'MSE' in metrics:
-            col = f"{p}_MSE"
-            out[col] = -1.0
-            out.loc[valid, col] = (err.pow(2))[valid]
-
-        if 'RMSE' in metrics:
-            col = f"{p}_RMSE"
-            out[col] = -1.0
-            out.loc[valid, col] = (err.abs())[valid]  # sqrt(MSE) per-sample == |err|
-
+            out[f"{p}_MSE"] = np.where(valid, (err ** 2), np.nan)
         if 'MAE' in metrics:
-            col = f"{p}_MAE"
-            out[col] = -1.0
-            out.loc[valid, col] = (err.abs())[valid]
+            out[f"{p}_MAE"] = np.where(valid, err.abs(), np.nan)
 
-    for m in metrics:
-        cols = [f"{p}_{m}" for p in params]
-        mean_col = f"{m}_mean"
-        out[mean_col] = out[cols].mean(axis=1)
-        out.loc[(out[cols] == -1).any(axis=1), mean_col] = -1.0
+    # row-wise means across parameters
+    if 'MSE' in metrics:
+        mse_cols = [f"{p}_MSE" for p in params]
+        out["MSE_mean"] = out[mse_cols].mean(axis=1)
+    if 'RMSE' in metrics:
+        mse_cols = [f"{p}_MSE" for p in params]
+        out["RMSE_mean"] = out[mse_cols].mean(axis=1).pow(0.5)   # sqrt(mean of squares)
+    if 'MAE' in metrics:
+        mae_cols = [f"{p}_MAE" for p in params]
+        out["MAE_mean"] = out[mae_cols].mean(axis=1)
 
     return out
 
@@ -329,48 +364,64 @@ def summarize_error_columns_to_json(df: pd.DataFrame, json_path: str | Path) -> 
 
 def save_single_sample_triplet(
     model: torch.nn.Module,
-    x: torch.Tensor,              # (C,H,W) or (1,C,H,W) or (N,) for flattened
-    y: torch.Tensor,              # (C,H,W) or (1,C,H,W) or (N,) for flattened
+    x: torch.Tensor,              # (C,H,W) or (1,C,H,W) or (N,) / (1,N) for flattened
+    y: torch.Tensor,              # (C,H,W) or (1,C,H,W) or (N,) / (1,N) for flattened
     device: str | torch.device,
     out_dir: str | Path = "results/single_sample",
-    prefix: str = "index",        # files: index_0_input.png, index_1_target.png, index_2_pred.png
-    channel: int = 0,             # which channel to visualize if multi-channel
+    prefix: str = "index",        # -> index_0_input.png, index_1_target.png, index_2_pred.png
+    channel: int = 0,             # used only for multi-channel image tensors
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-    mode: str = "img2img",       # add mode argument
+    mode: str = "img2img",        # "img2img" or "flattened"
 ) -> None:
+    """
+    If mode='flattened': model expects flattened input and returns flattened output.
+    Images are assumed square and reshaped for visualization.
+    """
     model.eval()
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    def _to_2d(t: torch.Tensor):
+    def _to_2d(t: torch.Tensor) -> np.ndarray:
+        """Return a (H,W) numpy array for plotting."""
         t = t.detach().cpu()
         if mode == "flattened":
             arr = t.reshape(-1).numpy()
-            side = int(np.sqrt(arr.shape[0]))
+            N = arr.size
+            side = math.isqrt(N)
+            if side * side != N:
+                raise ValueError(f"Flattened length {N} is not a perfect square.")
             return arr.reshape(side, side)
-        if t.ndim == 3:   # (C,H,W)
+        # image modes
+        if t.ndim == 3:         # (C,H,W)
             return t[channel].numpy()
-        if t.ndim == 2:   # (H,W)
+        if t.ndim == 2:         # (H,W)
             return t.numpy()
-        raise TypeError(f"Expected (C,H,W), (H,W), or flattened, got {tuple(t.shape)}")
+        raise TypeError(f"Expected (C,H,W), (H,W), or flattened 1D; got shape {tuple(t.shape)}")
 
-    def _save(arr2d, path):
-        fig, ax = plt.subplots(figsize=(6, 6))   # 1:1
+    def _save(arr2d: np.ndarray, path: Path) -> None:
+        fig, ax = plt.subplots(figsize=(6, 6))
         ax.imshow(arr2d, cmap="viridis", aspect="equal", vmin=vmin, vmax=vmax)
         ax.axis("off")
         fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
 
-    with torch.no_grad():
+    with torch.inference_mode():
         if mode == "flattened":
-            xin = x.to(device).float().reshape(-1)
-            xbat = xin.unsqueeze(0)  # (1,N)
-            pred = model(xbat)[0]    # (N,)
+            xbat = x.to(device).float().reshape(1, -1)  # (1,N)
+            pred = model(xbat)
+            if isinstance(pred, (list, tuple)):
+                pred = pred[0]
+            pred = pred.reshape(-1)  # ensure (N,)
         else:
-            xin = x.to(device).float()
-            xbat = xin if xin.ndim == 4 else xin.unsqueeze(0)   # (1,C,H,W)
-            pred = model(xbat)[0]                               # (C,H,W)
+            xbat = x.to(device).float()
+            if xbat.ndim == 3:          # (C,H,W) -> (1,C,H,W)
+                xbat = xbat.unsqueeze(0)
+            pred = model(xbat)
+            if isinstance(pred, (list, tuple)):
+                pred = pred[0]
+            # ensure (C,H,W) for visualization
+            pred = pred[0] if pred.ndim == 4 else pred
 
     x_img    = _to_2d(x[0] if (x.ndim == 4 and mode != "flattened") else x)
     y_img    = _to_2d(y[0] if (y.ndim == 4 and mode != "flattened") else y)
@@ -379,7 +430,9 @@ def save_single_sample_triplet(
     _save(x_img,    out_dir / f"{prefix}_0_input.png")
     _save(y_img,    out_dir / f"{prefix}_1_target.png")
     _save(pred_img, out_dir / f"{prefix}_2_pred.png")
-
+    
+    
+    
 
 def plot_sanity(df: pd.DataFrame, bins: int = 50, save_dir: str | Path | None = None) -> None:
     save_dir = Path(save_dir) if save_dir is not None else None
@@ -553,4 +606,136 @@ def plot_history_curves(folder: str,
     plt.savefig(pdf_path, bbox_inches="tight")
     plt.close()
 
+    return str(pdf_path)
+
+
+def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str):
+    """
+    Recursively scan `root_dir` for files named like MODEL-YYYYMMDDhhmmss_summary.json.
+    For `metric` (e.g. 'RMSE_mean'), read `<metric>_avg` and `<metric>_std`.
+    Plot a box plot per model using the list of `<metric>_avg` values across its files.
+    Save a PDF to `out_dir` named `{metric}_by_model_boxplot.pdf`.
+    Also print the per-model mean of `<metric>_avg` and `<metric>_std`.
+    """
+    root = Path(root_dir)
+    files = list(root.rglob("*_summary.json"))
+    if not files:
+        print("No *_summary.json files found.")
+        return None
+
+    avg_key = f"{metric}_avg"
+    std_key = f"{metric}_std"
+    avg_samples, std_samples = {}, {}
+
+    for p in files:
+        model = p.name.split("-")[0]
+        try:
+            obj = json.loads(p.read_text())
+        except Exception:
+            continue
+        if avg_key in obj and std_key in obj:
+            avg_samples.setdefault(model, []).append(float(obj[avg_key]))
+            std_samples.setdefault(model, []).append(float(obj[std_key]))
+
+    if not avg_samples:
+        print(f"No files had keys {avg_key} and {std_key}.")
+        return None
+
+    models = sorted(avg_samples.keys())
+    data = [avg_samples[m] for m in models]
+
+    # Minimal APS-like look: clean axes, inward ticks, no grid.
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
+    ax.boxplot(data, labels=models, showmeans=True)
+    ax.set_xlabel("Model")
+    ax.set_ylabel(metric)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(direction="in", top=False, right=False)
+    fig.tight_layout()
+
+    out_dir_path = Path(out_dir)
+    out_dir_path.mkdir(parents=True, exist_ok=True)
+    pdf_path = out_dir_path / f"{metric}_by_model_boxplot.pdf"
+    fig.savefig(pdf_path, format="pdf")
+    plt.show()
+
+    for m in models:
+        avgs = avg_samples[m]
+        stds = std_samples.get(m, [])
+        avg_mean = sum(avgs) / len(avgs)
+        std_mean = (sum(stds) / len(stds)) if stds else None
+        print(f"{m}: avg_mean={avg_mean:.6g}, std_mean={None if std_mean is None else round(std_mean,6)}, n={len(avgs)}")
+
+    return str(pdf_path)
+
+def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_dir: str, with_std: bool = True):
+    """
+    Scan `root_dir` recursively for MODEL-YYYYMMDDhhmmss_summary.json.
+    For each metric in `metrics`, read `<metric>_avg` and `<metric>_std`,
+    average across files per model, and draw grouped bars (one group per model,
+    one bar per metric). If `with_std` is True, show error bars using the
+    averaged `<metric>_std`. Saves `{out_dir}/metrics_by_model_barplot.pdf`.
+    """
+    root = Path(root_dir)
+    files = list(root.rglob("*_summary.json"))
+    if not files:
+        print("No *_summary.json files found.")
+        return None
+
+    values, stds = {}, {}
+    for p in files:
+        model = p.name.split("-")[0]
+        try:
+            data = json.loads(p.read_text())
+        except Exception:
+            continue
+        for met in metrics:
+            a, s = f"{met}_avg", f"{met}_std"
+            if a in data and s in data:
+                values.setdefault((model, met), []).append(float(data[a]))
+                stds.setdefault((model, met), []).append(float(data[s]))
+
+    # keep models that have all requested metrics
+    models = sorted({m for (m, _) in values})
+    models = [m for m in models if all((m, met) in values for met in metrics)]
+    if not models:
+        print("No models have all requested metrics.")
+        return None
+
+    # aggregates
+    avg = {(m, met): sum(values[(m, met)]) / len(values[(m, met)]) for m in models for met in metrics}
+    err = {(m, met): sum(stds[(m, met)]) / len(stds[(m, met)])     for m in models for met in metrics}
+
+    # plot
+    K = len(metrics)
+    width = 0.8 / K
+    x = list(range(len(models)))
+
+    fig, ax = plt.subplots(figsize=(7, 4.2), dpi=150)
+    for j, met in enumerate(metrics):
+        xs = [i - 0.4 + width/2 + j*width for i in x]
+        heights = [avg[(m, met)] for m in models]
+        if with_std:
+            yerrs = [err[(m, met)] for m in models]
+            ax.bar(xs, heights, width=width, yerr=yerrs, capsize=3, label=met)
+        else:
+            ax.bar(xs, heights, width=width, label=met)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(models)
+    ax.set_xlabel("Model")
+    ax.set_ylabel("Metric value")
+    ax.legend(frameon=False)
+
+    # APS-like minimal style
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(direction="in", top=False, right=False)
+    fig.tight_layout()
+
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+    pdf_path = out / "metrics_by_model_barplot.pdf"
+    fig.savefig(pdf_path, format="pdf")
+    plt.show()
     return str(pdf_path)
