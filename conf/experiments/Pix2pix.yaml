@@ -14,13 +14,11 @@ model:
   channels: 1
   lambda_l1: 100.0
 
-
 training:
   epochs: &epochs 100                     # Number of full passes over training data
-  learning_rate: 1.0e-4                   # Initial learning rate for optimizer
-  batch_size: &batch 4                   # Number of samples per gradient update
+  batch_size: &batch 1                   # Number of samples per gradient update
   betas: [0.5, 0.999]
-  lr: 2.0e-4
+  learning_rate: 2.0e-4
 
 callbacks:
   - name: "torch_batch_progress_bar"
@@ -48,6 +46,11 @@ data:
       - name: "torch_to_tensor"           # Convert to tensor
       - name: "torch_to_grayscale"        # Convert to grayscale
       - name: "torch_remap_range"         # Normalize pixel values to [0,1]
+        params:
+          current_min: 0.0
+          current_max: 255.0
+          target_min: -1.0
+          target_max: 1.0
       - name: "torch_split_width"         # Split image into left/right halves
         params:
           swap: True                      # Swap left/right halves

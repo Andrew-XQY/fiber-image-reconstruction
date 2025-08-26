@@ -49,7 +49,7 @@ class Upsample(nn.Module):
 class Generator(nn.Module):
     """
     Inputs:  (N, C, 256, 256)
-    Outputs: (N, C, 256, 256) with tanh activation
+    Outputs: (N, C, 256, 256) with activation
     """
     def __init__(self, channels: int):
         super().__init__()
