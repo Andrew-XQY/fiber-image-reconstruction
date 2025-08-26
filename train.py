@@ -16,7 +16,7 @@ from utils import *
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "SHL_DNN"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
+experiment_name = "Pix2pix"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
@@ -121,23 +121,12 @@ elif experiment_name == "SwinT":
         use_skips=config["model"]["use_skips"],
     )
 elif experiment_name == "Pix2pix":
-    from models.Pix2pix import GeneratorUNet, PatchDiscriminator, Pix2PixLosses
-    model = GeneratorUNet(
-        in_channels=config["model"]["in_channels"], 
-        out_channels=config["model"]["out_channels"], 
-        kernel_size=config["model"]["kernel_size"],
-        encoder=config["model"]["encoder"],
-        decoder=config["model"]["decoder"],
-        final_activation=config["model"]["final_activation"],  # match your data scaling
-    )
-    disc = PatchDiscriminator(
-        in_channels=config["model"]["in_channels"], 
-        cond_channels=config["model"]["out_channels"], 
-        kernel_size=config["model"]["kernel_size"],
-    )
-    opt_g = torch.optim.Adam(model.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
-    opt_d = torch.optim.Adam(disc.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
-    losses = Pix2PixLosses(lambda_l1=config["training"]["lambda_l1"])
+    from models.Pix2pix import Generator, Discriminator, Pix2PixLosses
+    G = Generator(channels=config["model"]["channels"])
+    D = Discriminator(channels=config["model"]["channels"])
+    losses = Pix2PixLosses(lambda_l1=config["model"]["lambda_l1"])
+    opt_g = torch.optim.Adam(G.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
+    opt_d = torch.optim.Adam(D.parameters(), lr=config["training"]["lr"], betas=config["training"]["betas"])
 elif experiment_name == "ERN":
     from models.ERN import EncoderRegressor
     model = EncoderRegressor(
@@ -149,8 +138,17 @@ elif experiment_name == "ERN":
         )
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = model.to(device)
-show_model_info(model)
+
+if experiment_name == "Pix2pix":
+    G = G.to(device)
+    D = D.to(device)
+    show_model_info(G)
+    show_model_info(D)
+else:
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
+    show_model_info(model)
+    
 
 
 # ==================== 
@@ -158,14 +156,13 @@ show_model_info(model)
 # ====================
 from functools import partial
 
-
 from xflow import TorchTrainer, TorchGANTrainer
 from xflow.trainers import build_callbacks_from_config
 from xflow.extensions.physics.beam import extract_beam_parameters
 
 # 1) loss/optimizer
 criterion = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
+
 
 # 2) callbacks (unchanged) + any custom wiring
 callbacks = build_callbacks_from_config(
@@ -187,8 +184,8 @@ else:
 # 3) run training
 if experiment_name in GAN:
     trainer = TorchGANTrainer(
-        generator=model,
-        discriminator=disc,
+        generator=G,
+        discriminator=D,
         optimizer_g=opt_g,
         optimizer_d=opt_d,
         losses=losses,
