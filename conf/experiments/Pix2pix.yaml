@@ -11,20 +11,16 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 model:
-  in_channels: 1
-  out_channels: 1
-  kernel_size: 4
-  encoder:          [64,  128, 128, 256, 512, 512]
-  decoder:          [512, 512, 256, 128, 128, 64 ]
-  final_activation: sigmoid
+  channels: 1
+  lambda_l1: 100.0
+
 
 training:
   epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
   batch_size: &batch 4                   # Number of samples per gradient update
-  betas: [0.9, 0.999]                     # Betas for Adam optimizer
+  betas: [0.5, 0.999]
   lr: 2.0e-4
-  lambda_l1: 100.0
 
 callbacks:
   - name: "torch_batch_progress_bar"
