@@ -2,7 +2,7 @@
 # Pix2pix (cGAN) fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 42 # 42, 168, 500
+seed: &seed 168 # 42, 168, 500
 name: &config "Pix2pix.yaml"
 framework: "pytorch"
 
