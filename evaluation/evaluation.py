@@ -492,7 +492,9 @@ def plot_history_curves(folder: str,
                         epoch_range: list[int] | tuple[int, int] | None = None,
                         smooth: bool = False,
                         show_minor_ticks: bool = False,
-                        use_line_styles: bool = False) -> str:
+                        use_line_styles: bool = False,
+                        show_grid: bool = False,
+                        line_width: float = 1.8) -> str:
     """
     Group *_history.json by the first token before '-'. For each group, compute an epoch-wise
     average of `metrics` across runs (using only runs that contain that epoch). Plot ONE line per group.
@@ -535,10 +537,11 @@ def plot_history_curves(folder: str,
         raise FileNotFoundError(f"No *_history.json files found in: {folder_path}")
 
     APS_COLORS = [
-        "#4477AA", "#EE6677", "#228833", "#CCBB44", "#66CCEE",
+        "#4477AA", "#FFA500", "#228833", "#CCBB44", "#66CCEE",
         "#AA3377", "#BBBBBB", "#000000", "#44AA99", "#FFA500",
         "#332288", "#88CCEE"
     ]
+
 
     # Collect metric sequences by model prefix
     groups: dict[str, list[list[float]]] = {}
@@ -603,16 +606,21 @@ def plot_history_curves(folder: str,
         x = np.arange(start + 1, end + 1 + 1)  # show epochs as 1-based on x-axis
 
         color = APS_COLORS[i % len(APS_COLORS)]
+        # Replace underscores with hyphens for visualization label
+        vis_model = model.replace('_', '-')
         if use_line_styles:
             style = LINE_STYLES[i % len(LINE_STYLES)]
-            ax.plot(x, y, label=model, linewidth=1.8, color=color, linestyle=style)
+            ax.plot(x, y, label=vis_model, linewidth=line_width, color=color, linestyle=style)
         else:
-            ax.plot(x, y, label=model, linewidth=1.8, color=color)
+            ax.plot(x, y, label=vis_model, linewidth=line_width, color=color)
 
     ax.set_xlabel("Epoch")
     ax.set_ylabel(metrics)
     ax.set_title(metrics)
-    # grid OFF; legend without frame
+    # Optional light dashed grid (both axes)
+    if show_grid:
+        ax.grid(True, linestyle="--", color="#cccccc", alpha=0.5, axis="both")
+    # legend without frame
     if len(groups) > 1:
         ax.legend(loc="best", fontsize=8, frameon=False)
     # Add minor ticks and ticks on all four axes if requested
@@ -664,10 +672,12 @@ def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str, show_grid
 
     models = sorted(avg_samples.keys())
     data = [avg_samples[m] for m in models]
+    # Replace underscores with hyphens for visualization
+    vis_models = [m.replace('_', '-') for m in models]
 
     # Minimal APS-like look: clean axes, inward ticks, optional grid.
     fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-    ax.boxplot(data, labels=models, showmeans=True)
+    ax.boxplot(data, labels=vis_models, showmeans=True)
     ax.set_xlabel("Model")
     ax.set_ylabel(metric)
     ax.spines["top"].set_visible(True)
@@ -725,6 +735,8 @@ def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_di
     if not models:
         print("No models have all requested metrics.")
         return None
+    # Replace underscores with hyphens for visualization
+    vis_models = [m.replace('_', '-') for m in models]
 
     # aggregates
     avg = {(m, met): sum(values[(m, met)]) / len(values[(m, met)]) for m in models for met in metrics}
@@ -736,17 +748,39 @@ def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_di
     x = list(range(len(models)))
 
     fig, ax = plt.subplots(figsize=(7, 4.2), dpi=150)
+    # Color palette for bars (reuse APS_COLORS from above if available)
+    # APS colors: blue, orange, green, then rest
+    # APS colors: blue, yellow, green, then rest (orange is #EE6677, yellow is #CCBB44)
+    # BAR_COLORS = ["#27569F", "#FF9100", "#2F8814", "#EE6677", "#66CCEE", "#AA3377", "#BBBBBB", "#000000", "#44AA99", "#FFA500", "#332288", "#88CCEE"]
+    BAR_COLORS = ["#228833", "#FFA500", "#4477AA"]
+    
+    # Find lowest RMSE_mean and MAE_mean values and their colors
+    min_lines = []
+    for target_metric in ["RMSE_MEAN", "MAE_MEAN"]:
+        for j, met in enumerate(metrics):
+            if met.upper() == target_metric:
+                vals = [avg[(m, met)] for m in models]
+                min_val = min(vals)
+                color = BAR_COLORS[j % len(BAR_COLORS)]
+                min_lines.append((min_val, color, met))
+    # Plot horizontal dashed lines for min RMSE and MAE (background)
+    for min_val, color, met in min_lines:
+        ax.axhline(min_val, linestyle="--", color=color, alpha=0.7, linewidth=1.5, zorder=1)
+    # Plot bars and collect bar colors (zorder=2 for bars)
     for j, met in enumerate(metrics):
         xs = [i - 0.4 + width/2 + j*width for i in x]
         heights = [avg[(m, met)] for m in models]
+        bar_color = BAR_COLORS[j % len(BAR_COLORS)]
+        # Legend label: remove '_mean' suffix if present
+        legend_label = met[:-5] if met.endswith('_mean') else met
         if with_std:
             yerrs = [err[(m, met)] for m in models]
-            ax.bar(xs, heights, width=width, yerr=yerrs, capsize=3, label=met)
+            ax.bar(xs, heights, width=width, yerr=yerrs, capsize=3, label=legend_label, color=bar_color, zorder=2)
         else:
-            ax.bar(xs, heights, width=width, label=met)
+            ax.bar(xs, heights, width=width, label=legend_label, color=bar_color, zorder=2)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(models)
+    ax.set_xticklabels(vis_models)
     ax.set_xlabel("Model")
     ax.set_ylabel("Metric value")
     ax.legend(frameon=False)
@@ -762,3 +796,109 @@ def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_di
     fig.savefig(pdf_path, format="pdf")
     plt.show()
     return str(pdf_path)
+
+
+
+
+# Parse model size and time based on Slurm .out files
+import re
+
+
+def _parse_duration_to_seconds(s: str) -> float:
+    """
+    Parse durations like '40.05s', '1m 23.4s', '2h 3m 1s', '12:34', or '1:02:03' to seconds.
+    """
+    s = s.strip()
+    # Unit-based forms: h/m/s
+    unit_matches = re.findall(r'(\d+(?:\.\d+)?)\s*([hms])', s, flags=re.I)
+    if unit_matches:
+        mult = {'h': 3600.0, 'm': 60.0, 's': 1.0}
+        return sum(float(v) * mult[u.lower()] for v, u in unit_matches)
+
+    # Colon forms: hh:mm:ss(.x) or mm:ss(.x)
+    if ':' in s:
+        try:
+            parts = [float(p) for p in s.split(':')]
+            if len(parts) == 3:
+                h, m, sec = parts
+            elif len(parts) == 2:
+                h, (m, sec) = 0.0, parts
+            else:
+                return float(s)
+            return h * 3600.0 + m * 60.0 + sec
+        except ValueError:
+            pass
+
+    # Plain float seconds or trailing 's'
+    s = s.rstrip().rstrip('sS').strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def parse_training_logs(root_dir: Union[str, Path], save_csv: Optional[Union[str, Path]] = None) -> pd.DataFrame:
+    """
+    Scan `root_dir` recursively for .out files, extract model name, model size, and total training time (minutes).
+
+    Extracts:
+      - Model name from lines like: "Model:               TransmissionMatrix"
+      - Model size from lines like: "Size:                256.00 MB" (kept as-is string)
+        * If missing, falls back to estimating from "Parameters: <N> total" assuming float32 (4 bytes/param)
+          and formats as "<XX.XX MB*".
+      - Epoch times from lines like: "Epoch 47 completed in 40.05s - ..." and sums them.
+
+    Args:
+        root_dir: Folder to search under (recursive) for *.out files.
+        save_csv: If provided, path to save the resulting CSV.
+
+    Returns:
+        pd.DataFrame with columns: ['model', 'size', 'total_train_time_min']
+    """
+    root = Path(root_dir)
+    rows = []
+
+    for fp in sorted(root.rglob("*.out")):
+        try:
+            text = fp.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            # Skip unreadable files
+            continue
+
+        # Model name
+        m = re.search(r'(?mi)^\s*Model:\s*(.+?)\s*$', text)
+        model_name = m.group(1).strip() if m else ""
+
+        # Size string (prefer direct 'Size:' line)
+        sm = re.search(r'(?mi)^\s*Size:\s*([^\r\n]+)$', text)
+        size_str = sm.group(1).strip() if sm else ""
+
+        # Fallback: estimate from Parameters: <num> total  (float32)
+        if not size_str:
+            pm = re.search(r'(?mi)^\s*Parameters:\s*([\d_,.]+)\s*total', text)
+            if pm:
+                num_txt = pm.group(1).replace(",", "").replace("_", "")
+                try:
+                    n_params = float(num_txt)
+                    mb = n_params * 4.0 / (1024.0 ** 2)
+                    size_str = f"{mb:.2f} MB*"
+                except Exception:
+                    pass
+
+        # Epoch durations
+        # Match 'Epoch <num> completed in <time>' and capture the <time> up to ' -' or EOL
+        epoch_times = re.findall(r'(?mi)Epoch\s+\d+\s+completed\s+in\s+([^\r\n-]+)', text)
+        total_seconds = sum(_parse_duration_to_seconds(t) for t in epoch_times)
+        total_minutes = round(total_seconds / 60.0, 3)
+
+        rows.append({
+            "model": model_name,
+            "size": size_str,
+            "total_train_time_min": total_minutes,
+        })
+
+    df = pd.DataFrame(rows, columns=["model", "size", "total_train_time_min"])
+    if save_csv:
+        Path(save_csv).parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(save_csv, index=False)
+    return df
