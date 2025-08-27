@@ -490,7 +490,9 @@ def plot_history_curves(folder: str,
                         metrics: str,
                         out_dir: str = "results/plots",
                         epoch_range: list[int] | tuple[int, int] | None = None,
-                        smooth: bool = False) -> str:
+                        smooth: bool = False,
+                        show_minor_ticks: bool = False,
+                        use_line_styles: bool = False) -> str:
     """
     Group *_history.json by the first token before '-'. For each group, compute an epoch-wise
     average of `metrics` across runs (using only runs that contain that epoch). Plot ONE line per group.
@@ -563,9 +565,15 @@ def plot_history_curves(folder: str,
     out_path.mkdir(parents=True, exist_ok=True)
     pdf_path = out_path / f"{metrics}.pdf"
 
-    plt.figure(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=(6, 4))
+    # Experienced researchers often use both color and line style to distinguish many lines.
+    # Common line styles: solid, dashed, dashdot, dotted, etc.
+    LINE_STYLES = ["-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 5)), (0, (1, 1)), (0, (5, 1)), (0, (3, 5, 1, 5))]
 
     for i, (model, seqs) in enumerate(groups.items()):
+        # Skip Pix2pix train_loss
+        if model == "Pix2pix" and metrics == "train_loss":
+            continue
         # Epoch-wise average (use only runs that have t)
         max_len = max(len(s) for s in seqs)
         mean_curve = []
@@ -574,7 +582,8 @@ def plot_history_curves(folder: str,
             for s in seqs:
                 if t < len(s) and s[t] is not None:
                     try:
-                        vals.append(float(s[t]))
+                        v = float(s[t])
+                        vals.append(v)
                     except (TypeError, ValueError):
                         pass
             mean_curve.append(np.mean(vals) if vals else np.nan)
@@ -594,22 +603,34 @@ def plot_history_curves(folder: str,
         x = np.arange(start + 1, end + 1 + 1)  # show epochs as 1-based on x-axis
 
         color = APS_COLORS[i % len(APS_COLORS)]
-        plt.plot(x, y, label=model, linewidth=1.8, color=color)
+        if use_line_styles:
+            style = LINE_STYLES[i % len(LINE_STYLES)]
+            ax.plot(x, y, label=model, linewidth=1.8, color=color, linestyle=style)
+        else:
+            ax.plot(x, y, label=model, linewidth=1.8, color=color)
 
-    plt.xlabel("Epoch")
-    plt.ylabel(metrics)
-    plt.title(metrics)
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel(metrics)
+    ax.set_title(metrics)
     # grid OFF; legend without frame
     if len(groups) > 1:
-        plt.legend(loc="best", fontsize=8, frameon=False)
-    plt.tight_layout()
-    plt.savefig(pdf_path, bbox_inches="tight")
-    plt.close()
+        ax.legend(loc="best", fontsize=8, frameon=False)
+    # Add minor ticks and ticks on all four axes if requested
+    if show_minor_ticks:
+        ax.xaxis.set_minor_locator(plt.AutoMinorLocator())
+        ax.yaxis.set_minor_locator(plt.AutoMinorLocator())
+        ax.tick_params(axis="both", which="minor", length=4, direction="in", top=True, right=True)
+        ax.tick_params(axis="both", which="major", length=7, direction="in", top=True, right=True)
+    else:
+        ax.tick_params(axis="both", which="major", direction="in", top=True, right=True)
+    fig.tight_layout()
+    fig.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
 
     return str(pdf_path)
 
 
-def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str):
+def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str, show_grid: bool = False):
     """
     Recursively scan `root_dir` for files named like MODEL-YYYYMMDDhhmmss_summary.json.
     For `metric` (e.g. 'RMSE_mean'), read `<metric>_avg` and `<metric>_std`.
@@ -644,7 +665,7 @@ def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str):
     models = sorted(avg_samples.keys())
     data = [avg_samples[m] for m in models]
 
-    # Minimal APS-like look: clean axes, inward ticks, no grid.
+    # Minimal APS-like look: clean axes, inward ticks, optional grid.
     fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
     ax.boxplot(data, labels=models, showmeans=True)
     ax.set_xlabel("Model")
@@ -652,6 +673,8 @@ def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str):
     ax.spines["top"].set_visible(True)
     ax.spines["right"].set_visible(True)
     ax.tick_params(direction="in", top=False, right=False)
+    if show_grid:
+        ax.yaxis.grid(True, linestyle="--", color="#cccccc", alpha=0.5)
     fig.tight_layout()
 
     out_dir_path = Path(out_dir)
