@@ -2,7 +2,7 @@
 # Encoder Regressor fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 502 # 42, 168, 500
+seed: &seed 42 # 42, 168, 500
 name: &config "ERN.yaml"
 framework: "pytorch"
 
@@ -13,7 +13,7 @@ paths:
 model:
   in_channels: 1
   kernel_size: 4
-  encoder: [64, 128, 256, 512, 512, 1024]
+  encoder: [64, 128, 128, 256, 512, 512]
   decoder: [512, 256, 4]
   final_activation: "sigmoid"
 
