@@ -1,8 +1,10 @@
 import os
+import glob
 from xflow.extensions.style.aps import *
 import json
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
 import torch
 from pathlib import Path
@@ -373,10 +375,21 @@ def save_single_sample_triplet(
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     mode: str = "img2img",        # "img2img" or "flattened"
+    add_edge_hist: bool = False,  # add edge-fixed projection curves
+    add_centroid: bool = False,   # add red dashed centroid lines
+    use_gaussian_fit: bool = False,  # NEW: draw Gaussian-fit curve instead of raw histogram
+    edge_line_width: float = 3.0,  # control orange line width for edge projections
+    edge_hist_scale: float = 0.22  # control scale_frac for edge projection histograms
 ) -> None:
     """
     If mode='flattened': model expects flattened input and returns flattened output.
     Images are assumed square and reshaped for visualization.
+
+    add_edge_hist: draw orange projection curves (sum along axes) inside the image
+                   — y-projection fixed to the RIGHT edge, x-projection fixed to the BOTTOM edge.
+    add_centroid:  draw red dashed lines at the centroid (Gaussian mean if use_gaussian_fit else weighted mean).
+    use_gaussian_fit: if True, fit a Gaussian (via moments) to each projection (after background removal)
+                      and plot that curve instead of the smoothed histogram.
     """
     model.eval()
     out_dir = Path(out_dir)
@@ -399,10 +412,127 @@ def save_single_sample_triplet(
             return t.numpy()
         raise TypeError(f"Expected (C,H,W), (H,W), or flattened 1D; got shape {tuple(t.shape)}")
 
-    def _save(arr2d: np.ndarray, path: Path) -> None:
+    def _overlay_edge_projections(ax: plt.Axes, img: np.ndarray, draw_centroid: bool, use_gauss: bool, line_width: float = 3.0, edge_hist_scale: float = 0.22) -> None:
+        """
+        Edge-fixed orange curves; optional red dashed centroid lines.
+        Anchors curves to exact image edges and zero-clips tiny tails.
+        """
+        img = np.asarray(img, dtype=float)
+        H, W = img.shape
+        scale_frac = edge_hist_scale # inward extent as a fraction of height/width
+        eps = 1e-12                 # numeric guard
+        zero_floor = 1e-6           # values below this (after normalization) are set to 0
+
+        # ---- Background handling ----
+        img_min = float(img.min())
+        img_max = float(img.max())
+        if img_min < 0.0:
+            img = (img - img_min) / (img_max - img_min + eps)  # rescale to [0,1]
+        else:
+            img = img - img_min  # subtract uniform background
+
+        # ---- Projections (onto x and y) ----
+        x_proj = img.sum(axis=0)   # length W
+        y_proj = img.sum(axis=1)   # length H
+
+        # ---- Light smoothing (reflect-padded moving average) ----
+        def _smooth1d(v: np.ndarray, k: int = 7) -> np.ndarray:
+            k = max(3, int(k) | 1)  # odd, >=3
+            pad = k // 2
+            vp = np.pad(v, (pad, pad), mode="reflect")
+            kernel = np.ones(k, dtype=float) / k
+            return np.convolve(vp, kernel, mode="valid")
+
+        x_sm = np.clip(_smooth1d(x_proj, k=7), 0.0, None)
+        y_sm = np.clip(_smooth1d(y_proj, k=7), 0.0, None)
+
+        # ---- Choose curve: Gaussian fit (moments) or smoothed histogram ----
+        def _gaussian_from_moments(v: np.ndarray) -> tuple[np.ndarray, float, float]:
+            n = v.size
+            idx = np.arange(n, dtype=float)
+            tot = v.sum()
+            if tot <= eps:
+                mu = (n - 1) / 2.0
+                sigma = max(n / 6.0, 1e-6)
+                g = np.zeros(n, dtype=float)
+                return g, mu, sigma
+            mu = (idx * v).sum() / tot
+            var = ((idx - mu) ** 2 * v).sum() / (tot + eps)
+            sigma = max(np.sqrt(max(var, eps)), 1e-6)
+            g = np.exp(-0.5 * ((idx - mu) / sigma) ** 2)
+            return g, mu, sigma
+
+        if use_gauss:
+            x_curve, mu_x, _ = _gaussian_from_moments(x_sm)
+            y_curve, mu_y, _ = _gaussian_from_moments(y_sm)
+        else:
+            x_curve = x_sm
+            y_curve = y_sm
+            xtot = x_sm.sum()
+            ytot = y_sm.sum()
+            mu_x = (np.arange(W) * x_sm).sum() / (xtot + eps) if xtot > 0 else (W - 1) / 2.0
+            mu_y = (np.arange(H) * y_sm).sum() / (ytot + eps) if ytot > 0 else (H - 1) / 2.0
+
+        # ---- Force baseline to zero & normalize ----
+        x_curve = np.maximum(x_curve - x_curve.min(), 0.0)
+        y_curve = np.maximum(y_curve - y_curve.min(), 0.0)
+        x_norm = x_curve / (x_curve.max() + eps)
+        y_norm = y_curve / (y_curve.max() + eps)
+
+        # ---- Hard zero tiny tails so they sit ON the axes ----
+        x_norm[x_norm < zero_floor] = 0.0
+        y_norm[y_norm < zero_floor] = 0.0
+        # Also pin endpoints to 0 to avoid smoothing/Gaussian tail lift
+        if x_norm.size > 0:
+            x_norm[0] = 0.0
+            x_norm[-1] = 0.0
+        if y_norm.size > 0:
+            y_norm[0] = 0.0
+            y_norm[-1] = 0.0
+
+        # ---- Map to exact EDGE coordinates (no half-pixel offset) ----
+        # Bottom edge is y = -0.5; move inward by +inset
+        bottom_inset = x_norm * (scale_frac * H)
+        xs = np.arange(W, dtype=float)          # pixel centers along x
+        ys = (H - 0.5) - bottom_inset              # start exactly on bottom edge
+
+        # Right edge is x = W - 0.5; move inward by -inset
+        right_inset = y_norm * (scale_frac * W)
+        ys2 = np.arange(H, dtype=float)         # pixel centers along y
+        xs2 = (W - 0.5) - right_inset           # start exactly on right edge
+
+        # ---- Draw (no anti-aliasing, butt caps) to avoid subpixel bleed ----
+        line_kw = dict(linewidth=line_width, color="orange", clip_on=True,
+                antialiased=False, solid_capstyle="butt", solid_joinstyle="miter")
+        ax.plot(xs, ys, **line_kw)
+        ax.plot(xs2, ys2, **line_kw)
+
+        if draw_centroid:
+            ax.axvline(mu_x, linestyle="--", linewidth=1.2, color="red",
+                    antialiased=False)
+            ax.axhline(mu_y, linestyle="--", linewidth=1.2, color="red",
+                    antialiased=False)
+
+    def _save(arr2d: np.ndarray, path: Path, with_hist: bool = False, with_centroid: bool = False) -> None:
+        H, W = arr2d.shape
         fig, ax = plt.subplots(figsize=(6, 6))
-        ax.imshow(arr2d, cmap="viridis", aspect="equal", vmin=vmin, vmax=vmax)
+
+        # Draw image exactly from edge to edge; no axis padding.
+        ax.imshow(
+            arr2d, cmap="viridis", vmin=vmin, vmax=vmax, aspect="equal",
+            extent=(-0.5, W - 0.5, H - 0.5, -0.5), interpolation="nearest"
+        )
+        ax.set_xlim(-0.5, W - 0.5)
+        ax.set_ylim(H - 0.5, -0.5)         # inverted to match image coords
+        ax.margins(0.0)                    # no extra margin
+        ax.autoscale(False)                # keep limits fixed
         ax.axis("off")
+
+        if with_hist:
+            _overlay_edge_projections(ax, arr2d, draw_centroid=with_centroid, use_gauss=use_gaussian_fit, line_width=edge_line_width, edge_hist_scale=edge_hist_scale)
+
+        # Remove figure-frame padding as well
+        plt.subplots_adjust(left=0, right=1, bottom=0, top=1)
         fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
 
@@ -427,12 +557,16 @@ def save_single_sample_triplet(
     y_img    = _to_2d(y[0] if (y.ndim == 4 and mode != "flattened") else y)
     pred_img = _to_2d(pred)
 
-    _save(x_img,    out_dir / f"{prefix}_0_input.png")
-    _save(y_img,    out_dir / f"{prefix}_1_target.png")
-    _save(pred_img, out_dir / f"{prefix}_2_pred.png")
-    
-    
-    
+    # Input: unchanged (no overlays)
+    _save(x_img, out_dir / f"{prefix}_0_input.png", with_hist=False, with_centroid=False)
+    # Target & Pred: add overlays as requested
+    _save(y_img, out_dir / f"{prefix}_1_target.png",
+          with_hist=add_edge_hist, with_centroid=add_centroid)
+    _save(pred_img, out_dir / f"{prefix}_2_pred.png",
+          with_hist=add_edge_hist, with_centroid=add_centroid)
+
+
+
 
 def plot_sanity(df: pd.DataFrame, bins: int = 50, save_dir: str | Path | None = None) -> None:
     save_dir = Path(save_dir) if save_dir is not None else None
@@ -680,8 +814,11 @@ def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str, show_grid
     ax.boxplot(data, labels=vis_models, showmeans=True)
     ax.set_xlabel("Model")
     ax.set_ylabel(metric)
-    ax.spines["top"].set_visible(True)
-    ax.spines["right"].set_visible(True)
+    # Remove bounding box (hide all spines except bottom and left)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
     ax.tick_params(direction="in", top=False, right=False)
     if show_grid:
         ax.yaxis.grid(True, linestyle="--", color="#cccccc", alpha=0.5)
@@ -902,3 +1039,322 @@ def parse_training_logs(root_dir: Union[str, Path], save_csv: Optional[Union[str
         Path(save_csv).parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(save_csv, index=False)
     return df
+
+
+def plot_model_error_boxplot(
+    input_dir: str,
+    metric: str,
+    output_pdf: str,
+    order_by: str = "alpha",        # "alpha" or "metric"
+    show_mean_marker: bool = True,  # green triangle mean marker
+    spacing: float = 1.3            # >1.0 increases horizontal gaps
+) -> None:
+    """
+    Create plain per-model box plots from CSV files in `input_dir`.
+
+    Files must be named like: <MODEL>-<anything>.csv (e.g., CAE-2025082504.csv)
+    `metric` must match a column name (case-insensitive).
+
+    If each run for a model has a per-sample ID column (any of sample_id/image_id/id/index)
+    and IDs are consistent across runs, the function averages the metric per sample across runs
+    before plotting. Otherwise, it concatenates per-sample metrics across runs.
+
+    Styling: white-filled boxes, median + whiskers (no fliers), optional green triangle mean.
+    """
+    csv_paths = sorted(glob.glob(os.path.join(input_dir, "*.csv")))
+    if not csv_paths:
+        raise FileNotFoundError(f"No .csv files found in: {input_dir}")
+
+    def find_col(df: pd.DataFrame, name: str) -> Optional[str]:
+        m = {c.lower(): c for c in df.columns}
+        return m.get(name.lower())
+
+    id_candidates = ["sample_id", "image_id", "id", "index"]
+    per_model: Dict[str, List[pd.DataFrame]] = {}
+
+    # Load
+    for p in csv_paths:
+        model = Path(p).stem.split("-", 1)[0]
+        df = pd.read_csv(p)
+
+        mcol = find_col(df, metric)
+        if mcol is None:
+            raise KeyError(f"Metric '{metric}' not found in {p}. Columns: {list(df.columns)}")
+
+        idcol = None
+        for cand in id_candidates:
+            c = find_col(df, cand)
+            if c is not None:
+                idcol = c
+                break
+
+        sub = df[[mcol] + ([idcol] if idcol else [])].copy()
+        sub[mcol] = pd.to_numeric(sub[mcol], errors="coerce")
+        sub = sub.dropna(subset=[mcol])
+        if idcol:
+            sub = sub.rename(columns={idcol: "_sample_id_"})
+        per_model.setdefault(model, []).append(sub)
+
+    # Aggregate per model
+    model_names, data_arrays = [], []
+    for model, runs in sorted(per_model.items()):
+        if not runs:
+            continue
+        all_have_ids = all("_sample_id_" in r.columns for r in runs)
+        if all_have_ids:
+            merged = None
+            for i, r in enumerate(runs):
+                r_i = r.set_index("_sample_id_").sort_index()
+                r_i.columns = [f"run{i}"]
+                merged = r_i if merged is None else merged.join(r_i, how="inner")
+            vals = merged.mean(axis=1).values  # per-sample mean across seeds
+        else:
+            vals = pd.concat([r[r.columns[0]] for r in runs], axis=0).values
+
+        vals = vals[~np.isnan(vals)]
+        if vals.size == 0:
+            continue
+        model_names.append(model)
+        data_arrays.append(vals)
+
+    if not data_arrays:
+        raise RuntimeError("No valid metric data collected for plotting.")
+
+    # Order
+    if order_by.lower() == "metric":
+        med = [float(np.median(a)) for a in data_arrays]
+        order = np.argsort(med)  # lower is better
+    else:  # alphabetical
+        order = np.argsort(np.array(model_names, dtype=object))
+    model_names = [model_names[i] for i in order]
+    data_arrays = [data_arrays[i] for i in order]
+
+    # IBIC-friendly minimal styling
+    plt.rcParams.update({
+        "font.size": 8,
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+    })
+
+    fig = plt.figure(figsize=(3.4, 2.6), dpi=300)  # ~0.85 column width
+    ax = plt.gca()
+    ax.set_axisbelow(True)  # grid behind boxes
+    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.6)
+
+    # Positions (add extra spacing)
+    n = len(model_names)
+    positions = 1 + np.arange(n) * spacing
+
+    # Plain boxplot with white fill; no fliers
+    meanprops = dict(marker="^", markerfacecolor="green", markeredgecolor="green", markersize=4)
+    bp = ax.boxplot(
+        data_arrays,
+        positions=positions,
+        vert=True,
+        patch_artist=True,     # enables facecolor
+        showmeans=show_mean_marker,
+        meanprops=meanprops if show_mean_marker else None,
+        showfliers=False,
+        whis=1.5,
+        widths=0.5
+    )
+
+    # White boxes (so grid doesn't "bleed" visually)
+    for b in bp["boxes"]:
+        b.set(facecolor="white", edgecolor="black", linewidth=1.0)
+    for elem in ["medians", "whiskers", "caps"]:
+        for a in bp[elem]:
+            a.set(color="black", linewidth=1.0)
+
+    # X labels: replace "_" with "-"
+    labels = [name.replace("_", "-") for name in model_names]
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels, rotation=0)
+    ax.set_ylabel(metric)
+
+    fig.tight_layout()
+    Path(output_pdf).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_pdf, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_metric_box_by_model_csv(
+    root_dir: str,
+    metric: str,
+    out_dir: str,
+    show_grid: bool = False,
+    spacing: float = 1.8,             # larger gaps between boxes
+    show_mean_marker: bool = True,    # small green triangle
+    show_legend: bool = True,         # control legend display
+    show_violin: bool = False,        # violin overlay (ignored if show_hist=True)
+    show_hist: bool = False,          # histogram overlay instead of violin
+    hist_bins: int = 20,              # histogram bin count
+    hist_max_halfwidth: float = 0.35, # max half-width of hist bars
+    overlay_clip_quantiles: Optional[Tuple[float, float]] = None,  # clip overlay only
+    overlay_clip_max: Optional[float] = None,   # NEW: drop overlay values > this
+    y_limit_quantiles: Optional[Tuple[float, float]] = None,       # robust axis limits
+    use_symlog: bool = False,         # optional heavy-tail y-scale
+    symlog_linthresh: float = 1e-2,   # linear threshold for symlog
+    box_width: float = 0.45,          # width of the box in boxplot
+    hist_alpha: float = 0.25          # transparency of histogram bins
+):
+    # --- load & group ---
+    root = Path(root_dir)
+    csv_paths = sorted(root.glob("*.csv"))
+    if not csv_paths:
+        print("No *.csv files found.")
+        return None
+
+    def find_col(df: pd.DataFrame, name: str) -> Optional[str]:
+        mapping = {c.lower(): c for c in df.columns}
+        return mapping.get(name.lower())
+
+    id_candidates = ["sample_id", "image_id", "id", "index"]
+    per_model: Dict[str, List[pd.DataFrame]] = {}
+
+    for p in csv_paths:
+        model = p.stem.split("-", 1)[0]
+        try:
+            df = pd.read_csv(p)
+        except Exception:
+            continue
+        mcol = find_col(df, metric)
+        if mcol is None:
+            continue
+        idcol = next((find_col(df, cand) for cand in id_candidates if find_col(df, cand)), None)
+
+        sub = df[[mcol] + ([idcol] if idcol else [])].copy()
+        sub[mcol] = pd.to_numeric(sub[mcol], errors="coerce")
+        sub = sub.dropna(subset=[mcol])
+        if idcol:
+            sub.rename(columns={idcol: "_sample_id_"}, inplace=True)
+        per_model.setdefault(model, []).append(sub)
+
+    # --- aggregate per model ---
+    models = sorted(per_model.keys())
+    model_data: Dict[str, np.ndarray] = {}
+    for model in models:
+        runs = per_model[model]
+        if not runs:
+            continue
+        all_have_ids = all("_sample_id_" in r.columns for r in runs)
+        if all_have_ids:
+            merged = None
+            for i, r in enumerate(runs):
+                r_i = r.set_index("_sample_id_").sort_index()
+                r_i.columns = [f"run{i}"]
+                merged = r_i if merged is None else merged.join(r_i, how="inner")
+            vals = merged.mean(axis=1).values
+        else:
+            vals = pd.concat([r[r.columns[0]] for r in runs], axis=0).values
+        vals = vals[~np.isnan(vals)]
+        if vals.size:
+            model_data[model] = vals
+
+    if not model_data:
+        print(f"No valid metric '{metric}' found in CSV files.")
+        return None
+
+    # order + labels
+    models = sorted(model_data.keys(), key=lambda s: s.lower())
+    data = [model_data[m] for m in models]
+    vis_labels = [m.replace("_", "-") for m in models]
+
+    # --- overlay-only clipping (does NOT affect boxplot data) ---
+    def clip_quant(arr: np.ndarray, q: Tuple[float, float]) -> np.ndarray:
+        lo = np.quantile(arr, q[0]); hi = np.quantile(arr, q[1])
+        return arr[(arr >= lo) & (arr <= hi)]
+
+    overlay_data: List[np.ndarray] = []
+    for arr in data:
+        ov = arr
+        if overlay_clip_max is not None:
+            ov = ov[ov <= overlay_clip_max]
+        if overlay_clip_quantiles is not None and ov.size:
+            ov = clip_quant(ov, overlay_clip_quantiles)
+        overlay_data.append(ov)
+
+    # --- figure ---
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
+    ax.set_axisbelow(True)
+    if show_grid:
+        ax.yaxis.grid(True, linestyle="--", color="#cccccc", alpha=0.5)
+
+    positions = 1 + np.arange(len(data)) * spacing
+
+    # --- overlay first (behind boxes) ---
+    if show_hist:
+        for pos, vals in zip(positions, overlay_data):
+            if vals.size == 0:
+                continue
+            counts, edges = np.histogram(vals, bins=hist_bins, density=True)
+            if counts.max() <= 0:
+                continue
+            for c, y0, y1 in zip(counts, edges[:-1], edges[1:]):
+                half_w = (c / counts.max()) * hist_max_halfwidth
+                rect = Rectangle((pos - half_w, y0), 2 * half_w, y1 - y0,
+                                 facecolor="0.7", edgecolor=None,
+                                 alpha=hist_alpha, linewidth=0)
+                # Do not add label, so bins are not included in legend
+                ax.add_patch(rect)
+    elif show_violin:
+        v = ax.violinplot(overlay_data, positions=positions, widths=0.9,
+                          showmeans=False, showmedians=False, showextrema=False,
+                          bw_method="scott")
+        for body in v["bodies"]:
+            body.set_facecolor("0.7"); body.set_edgecolor("0.4")
+            body.set_alpha(0.25); body.set_linewidth(0.5)
+
+    # --- boxplot (full, unclipped data) ---
+    bp = ax.boxplot(
+        data, positions=positions, labels=None, vert=True,
+        patch_artist=True, showmeans=show_mean_marker, showfliers=False,
+        whis=1.5, widths=box_width,
+        meanprops=dict(marker="^", markersize=3,
+                       markerfacecolor="green", markeredgecolor="green"),
+        medianprops=dict(color="orange", linewidth=1.2),
+    )
+    for b in bp["boxes"]:
+        b.set(facecolor="white", edgecolor="black", linewidth=1.0)
+    for elem in ["whiskers", "caps"]:
+        for a in bp[elem]:
+            a.set(color="black", linewidth=1.0)
+
+    ax.set_xticks(positions); ax.set_xticklabels(vis_labels, rotation=0)
+    ax.set_xlabel("Model"); ax.set_ylabel(metric)
+    ax.spines["top"].set_visible(True); ax.spines["right"].set_visible(True)
+    ax.tick_params(direction="in", top=False, right=False)
+
+    # optional robust y-limits & symlog
+    if y_limit_quantiles is not None:
+        all_vals = np.concatenate(data)
+        ylo = np.quantile(all_vals, y_limit_quantiles[0])
+        yhi = np.quantile(all_vals, y_limit_quantiles[1])
+        if np.isfinite(ylo) and np.isfinite(yhi) and yhi > ylo:
+            ax.set_ylim(ylo, yhi)
+    if use_symlog:
+        ax.set_yscale("symlog", linthresh=symlog_linthresh)
+
+    if show_legend:
+        from matplotlib.lines import Line2D
+        import matplotlib.patches as mpatches
+        handles = [
+            Line2D([0], [0], color="orange", linewidth=1.2, label="Median"),
+            Line2D([0], [0], marker="^", color="white",
+                   markerfacecolor="green", markeredgecolor="green",
+                   markersize=7, linestyle="None", label="Mean"),
+        ]
+        # Do not add histogram bin patch to legend
+        if show_violin:
+            handles.insert(0, mpatches.Patch(facecolor="0.7", edgecolor="0.4",
+                                             alpha=0.25, label="Distribution (violin)"))
+        ax.legend(handles=handles, loc="best", frameon=True,
+                  facecolor="white", edgecolor="black")
+
+    fig.tight_layout()
+    out_dir_path = Path(out_dir); out_dir_path.mkdir(parents=True, exist_ok=True)
+    pdf_path = out_dir_path.joinpath(f"{metric}_by_model_boxplot.pdf")
+    fig.savefig(str(pdf_path), format="pdf", bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {pdf_path}")
+    return str(pdf_path)
