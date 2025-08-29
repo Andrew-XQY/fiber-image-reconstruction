@@ -28,12 +28,6 @@ os.makedirs(experiment_output_dir, exist_ok=True)
 # ==================== 
 # Prepare Dataset
 # ====================
-"""The old method has a test data leak problem due to the similarity in adjacent samples"""
-# provider = FileProvider(config["paths"]["dataset"]).\
-#     subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) # 
-# train_provider, temp_provider = provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
-# val_provider, test_provider = temp_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
-
 training_folder = os.path.join(config["paths"]["dataset"], config["data"]["training_set"])
 evaluation_folder = os.path.join(config["paths"]["dataset"], config["data"]["evaluation_set"])
 train_provider = FileProvider(training_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
