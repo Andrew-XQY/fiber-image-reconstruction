@@ -628,7 +628,8 @@ def plot_history_curves(folder: str,
                         show_minor_ticks: bool = False,
                         use_line_styles: bool = False,
                         show_grid: bool = False,
-                        line_width: float = 1.8) -> str:
+                        line_width: float = 1.8,
+                        advanced_smooth: int | None = None) -> str:
     """
     Group *_history.json by the first token before '-'. For each group, compute an epoch-wise
     average of `metrics` across runs (using only runs that contain that epoch). Plot ONE line per group.
@@ -664,6 +665,28 @@ def plot_history_curves(folder: str,
         den = np.convolve(good, kernel, mode="same")
         out = np.divide(num, den, out=np.full_like(num, np.nan), where=den > 0)
         return out
+
+    def _advanced_smooth(y: np.ndarray, window_length: int = 7, polyorder: int = 2) -> np.ndarray:
+        """Savitzky-Golay smoothing, NaN-aware."""
+        try:
+            from scipy.signal import savgol_filter
+        except ImportError:
+            raise ImportError("scipy is required for advanced smoothing. Please install it via 'pip install scipy'.")
+        y = np.asarray(y, dtype=float)
+        n = len(y)
+        if n < window_length or window_length < 3:
+            return y
+        # window_length must be odd and <= n
+        if window_length % 2 == 0:
+            window_length += 1
+        if window_length > n:
+            window_length = n if n % 2 == 1 else n - 1
+        # Fill NaNs for filtering, then restore NaNs after
+        nan_mask = ~np.isfinite(y)
+        y_filled = np.where(nan_mask, np.nanmean(y), y)
+        y_smooth = savgol_filter(y_filled, window_length=window_length, polyorder=polyorder, mode='interp')
+        y_smooth[nan_mask] = np.nan
+        return y_smooth
 
     folder_path = Path(folder)
     files = sorted(folder_path.glob("*_history.json"))
@@ -735,7 +758,10 @@ def plot_history_curves(folder: str,
             start, end = 0, max_len - 1
 
         y = np.array(mean_curve[start:end + 1], dtype=float)
-        if smooth:
+        # Advanced smoothing for MAE metrics
+        if advanced_smooth is not None and "MAE" in metrics.upper():
+            y = _advanced_smooth(y, window_length=int(advanced_smooth))
+        elif smooth:
             y = _smooth_same(y)
         x = np.arange(start + 1, end + 1 + 1)  # show epochs as 1-based on x-axis
 
