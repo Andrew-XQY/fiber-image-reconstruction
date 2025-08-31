@@ -142,8 +142,9 @@ if experiment_name == "Pix2pix":
     show_model_info(G)
     show_model_info(D)
 elif experiment_name == "SwinT":
+    model = model.to(device)
     # Loss: L1 + 0.3*SSIM
-    criterion = ReconLoss(w_l1=1.0, w_ssim=0.3, w_perc=0.0, use_perc=False)
+    criterion = ReconLoss(w_l1=1.0, w_ssim=0.3)
     # Optimizer: AdamW with recommended params
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -152,13 +153,12 @@ elif experiment_name == "SwinT":
         eps=1e-8,
         weight_decay=0.01
     )
-    
+    show_model_info(model)
 else:
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
     show_model_info(model)
     
-
 
 # ==================== 
 # Training
