@@ -108,14 +108,15 @@ elif experiment_name == "U_Net":
         final_activation=config["model"]["final_activation"],
     )
 elif experiment_name == "SwinT":
-    from models.SwinT import SwinUNet, ReconLoss
+    from models.SwinT import SwinUNet, ReconLoss, build_swin_unet_tiny
     # model = SwinUNet(
     #     in_chans=config["model"]["in_chans"],
     #     out_chans=config["model"]["out_chans"],
     #     use_skips=config["model"]["use_skips"],
     # )
+    # model = SwinUNet(window_size=8)
     
-    model = SwinUNet(window_size=8)
+    model = build_swin_unet_tiny() 
 
 elif experiment_name == "Pix2pix":
     from models.Pix2pix import Generator, Discriminator, Pix2PixLosses
@@ -142,17 +143,26 @@ if experiment_name == "Pix2pix":
     show_model_info(G)
     show_model_info(D)
 elif experiment_name == "SwinT":
+    from torch.optim.lr_scheduler import LambdaLR
+
+    total_steps = config['training']['epochs'] * len(train_dataset)
+    warmup_steps = int(0.1 * total_steps)
+    
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return (step + 1) / max(1, warmup_steps)
+        t = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return 0.5 * (1.0 + math.cos(math.pi * t))
+
     model = model.to(device)
-    # Loss: L1 + 0.3*SSIM
-    criterion = ReconLoss(w_l1=1.0, w_ssim=0.3)
+    criterion = ReconLoss(w_l1=1.0, w_ssim=0.3) # Loss: L1 + 0.3*SSIM
     # Optimizer: AdamW with recommended params
+    base_lr = 4e-4 if config['training']['batch_size'] >= 64 else 2e-4
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=2e-4,
-        betas=(0.9, 0.999),
-        eps=1e-8,
-        weight_decay=0.01
+        lr=base_lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01
     )
+    scheduler = LambdaLR(optimizer, lr_lambda)
     show_model_info(model)
 else:
     model = model.to(device)
@@ -213,7 +223,9 @@ else:
         callbacks=callbacks,
         output_dir=config["paths"]["output"],
         data_pipeline=train_dataset,
-        val_metrics=[beam_param_metric]
+        val_metrics=[beam_param_metric],
+        scheduler= scheduler if experiment_name == "SwinT" else None, 
+        scheduler_step_per_batch=True,
     )
 
 history = trainer.fit(
