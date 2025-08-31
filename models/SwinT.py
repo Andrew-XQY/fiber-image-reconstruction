@@ -1,232 +1,155 @@
-# Minimal Swin-U-Net (Swin V2-style) for 1x256x256 -> 1x256x256
-# Key V2 bits included:
-#  - Scaled cosine attention (L2-normalized Q,K with learnable tau)
-#  - Continuous relative position bias via tiny MLP on (log-spaced) relative coords
-#  - Window attention + shifted-window attention (cyclic shift + mask)
-#  - Patch Merging (down) and Patch Expand (up) to build a U-Net-like encoder/decoder
-#
-# Notes:
-#  - For simplicity, I use pre-norm inside blocks (classic Transformer style).
-#    Swin V2 introduced residual-post-norm for very large scale models; you can
-#    swap to post-norm if you need exact parity with the paper’s stability trick.
-#  - The CRPB here is a compact “continuous” bias MLP that takes
-#    sign(x)*log(1+|x|) coords and predicts per-head biases.
-#  - Depths and heads are small to keep code readable; scale as needed.
-#  - Input/Output are 1×256×256; change patch_size / depths carefully if you alter sizes.
-
-import math
-from typing import Tuple, Optional, List
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Tuple, Optional
+import math
 
-
-# ---------------------------
-# Utilities: window partition/reverse
-# ---------------------------
+# ----------------------
+# Small utilities
+# ----------------------
 
 def window_partition(x, window_size: int):
-    """
-    x: (B, H, W, C)
-    return: (num_windows*B, window_size, window_size, C)
-    """
+    """x: (B,H,W,C) -> (B*nW, Ws, Ws, C)"""
     B, H, W, C = x.shape
     x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    # -> (B, nWh, win, nWw, win, C) -> (B*nWh*nWw, win, win, C)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
     return x
 
 
 def window_reverse(windows, window_size: int, H: int, W: int):
-    """
-    windows: (num_windows*B, window_size, window_size, C)
-    return: (B, H, W, C)
-    """
+    """windows: (B*nW, Ws, Ws, C) -> (B,H,W,C)"""
     B = int(windows.shape[0] // (H // window_size * W // window_size))
     x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
     return x
 
 
-# ---------------------------
-# Continuous Relative Position Bias (tiny MLP)
-# ---------------------------
+class MLP(nn.Module):
+    def __init__(self, dim, mlp_ratio=4.0):
+        super().__init__()
+        hidden = int(dim * mlp_ratio)
+        self.fc1 = nn.Linear(dim, hidden)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(hidden, dim)
 
-class CRPBias(nn.Module):
-    """
-    Continuous relative position bias (simplified):
-    - Build relative coords for a window (win x win).
-    - Map (dy, dx) -> sign*log(1+|.|) -> MLP -> per-head bias.
-    Output shape per window: (num_heads, win*win, win*win)
-    """
-    def __init__(self, window_size: int, num_heads: int, hidden_dim: int = 64):
+    def forward(self, x):
+        return self.fc2(self.act(self.fc1(x)))
+
+
+# ----------------------
+# Relative Position Bias (Swin v1, discrete table)
+# ----------------------
+class RelativePositionBias(nn.Module):
+    def __init__(self, window_size: int, num_heads: int):
         super().__init__()
         self.window_size = window_size
         self.num_heads = num_heads
-
-        # Precompute relative coordinates for a window
-        coords = torch.stack(torch.meshgrid(
-            torch.arange(window_size), torch.arange(window_size), indexing='ij'
-        ))  # (2, win, win)
-        coords_flat = coords.reshape(2, -1)  # (2, win*win)
-        rel = coords_flat[:, :, None] - coords_flat[:, None, :]  # (2, win*win, win*win) (dy, dx)
-        # log-spaced transform as in SwinV2 spirit: sign(x) * log(1 + |x|)
-        rel = rel.float()
-        rel = torch.sign(rel) * torch.log1p(torch.abs(rel))
-        # store as buffer (2, N, N)
-        self.register_buffer("rel_coords", rel)  # no grad
-
-        in_dim = 2  # (dy, dx)
-        self.mlp = nn.Sequential(
-            nn.Linear(in_dim, hidden_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim, num_heads)
+        # (2*Ws-1, 2*Ws-1, H)
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros((2 * window_size - 1) * (2 * window_size - 1), num_heads)
         )
+        # pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(window_size)
+        coords_w = torch.arange(window_size)
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))  # 2, Ws, Ws
+        coords_flatten = torch.flatten(coords, 1)  # 2, Ws*Ws
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, N, N
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # N, N, 2
+        relative_coords[:, :, 0] += window_size - 1
+        relative_coords[:, :, 1] += window_size - 1
+        relative_coords[:, :, 0] *= 2 * window_size - 1
+        relative_position_index = relative_coords.sum(-1)  # N, N
+        self.register_buffer("relative_position_index", relative_position_index)
+        nn.init.trunc_normal_(self.relative_position_bias_table, std=0.02)
 
-    def forward(self):
-        # rel_coords: (2, N, N) -> (N*N, 2) via stack then mlp then reshape
-        # We'll map each (dy,dx) pair to a bias per head.
-        # Efficient path: flatten pairs, run MLP, reshape back.
-        two, N, _ = self.rel_coords.shape  # N = win*win
-        rel = torch.stack([self.rel_coords[0], self.rel_coords[1]], dim=-1)  # (N, N, 2)
-        rel = rel.view(-1, 2)  # (N*N, 2)
-        bias = self.mlp(rel)  # (N*N, num_heads)
-        bias = bias.view(N, N, self.num_heads).permute(2, 0, 1).contiguous()  # (heads, N, N)
-        return bias  # add to attention logits per head
+    def forward(self, N: int):
+        # return bias: (num_heads, N, N)
+        bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+            N, N, -1
+        )  # N,N,H
+        return bias.permute(2, 0, 1).contiguous()
 
 
-# ---------------------------
-# Scaled Cosine Attention with (shifted) windowing + mask
-# ---------------------------
-
-class WindowAttentionV2(nn.Module):
-    """
-    V2-style attention in a window:
-      - Q,K L2-normalized -> cosine similarity
-      - multiply by learnable tau (per head)
-      - add continuous relative position bias
-      - optional attention mask for SW-MSA
-    Input:  x_windows: (num_windows*B, win*win, C)
-    Output: (num_windows*B, win*win, C)
-    """
+# ----------------------
+# Window Attention (scaled dot-product) + optional mask for SW-MSA
+# ----------------------
+class WindowAttention(nn.Module):
     def __init__(self, dim: int, window_size: int, num_heads: int):
         super().__init__()
         self.dim = dim
         self.window_size = window_size
         self.num_heads = num_heads
         head_dim = dim // num_heads
-        assert dim % num_heads == 0, "dim must be divisible by num_heads"
+        assert dim % num_heads == 0
+        self.scale = head_dim ** -0.5
 
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        # learnable per-head temperature (tau in paper)
-        self.tau = nn.Parameter(torch.ones(num_heads))
-
         self.proj = nn.Linear(dim, dim)
-        self.crpb = CRPBias(window_size, num_heads)
+        self.rpb = RelativePositionBias(window_size, num_heads)
 
     def forward(self, x, attn_mask: Optional[torch.Tensor] = None):
-        """
-        x: (B_w, N, C)  where N=win*win
-        attn_mask: (num_windows, N, N) or None
-        """
-        B_w, N, C = x.shape
-        qkv = self.qkv(x)  # (B_w, N, 3C)
-        q, k, v = qkv.chunk(3, dim=-1)  # each (B_w, N, C)
+        B_, N, C = x.shape
+        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads)
+        qkv = qkv.permute(2, 0, 3, 1, 4)  # 3, B_, h, N, d
+        q, k, v = qkv[0], qkv[1], qkv[2]
+        q = q * self.scale
+        attn = (q @ k.transpose(-2, -1))  # B_, h, N, N
 
-        # split heads
-        q = q.view(B_w, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)  # (B_w, h, N, d)
-        k = k.view(B_w, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        v = v.view(B_w, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-
-        # L2 normalize along feature dim for cosine sim
-        q = F.normalize(q, dim=-1)
-        k = F.normalize(k, dim=-1)
-
-        # cosine attention logits: (B_w, h, N, N)
-        attn = torch.matmul(q, k.transpose(-2, -1))  # cosine in [-1,1]
-        attn = attn * self.tau.view(1, -1, 1, 1)     # learnable scaling per head
-
-        # add continuous relative position bias (h, N, N)
-        bias = self.crpb().to(attn.dtype)            # same N for a given window_size
-        attn = attn + bias.view(1, self.num_heads, N, N)
-
+        attn = attn + self.rpb(N).unsqueeze(0)
         if attn_mask is not None:
-            # attn_mask: (num_windows, N, N)  -> expand across heads & batch of windows
             nW = attn_mask.shape[0]
-            attn = attn.view(B_w // nW, nW, self.num_heads, N, N)
+            attn = attn.view(B_ // nW, nW, self.num_heads, N, N)
             attn = attn + attn_mask.view(1, nW, 1, N, N)
             attn = attn.view(-1, self.num_heads, N, N)
 
-        attn = F.softmax(attn, dim=-1)
-        out = torch.matmul(attn, v)  # (B_w, h, N, d)
-        out = out.permute(0, 2, 1, 3).contiguous().view(B_w, N, C)
-        out = self.proj(out)
-        return out
+        attn = attn.softmax(dim=-1)
+        out = (attn @ v).transpose(1, 2).reshape(B_, N, C)
+        return self.proj(out)
 
 
-# ---------------------------
-# Swin V2 Block (W-MSA or SW-MSA)
-# ---------------------------
-
-class SwinBlockV2(nn.Module):
-    """
-    One Swin block:
-      - (optional) cyclic shift
-      - window partition -> WindowAttentionV2 -> window reverse
-      - residual + MLP residual
-    """
-    def __init__(self, dim: int, input_resolution: Tuple[int, int],
-                 num_heads: int, window_size: int = 7, shift_size: int = 0, mlp_ratio: float = 4.0):
+# ----------------------
+# Swin Transformer Block (W-MSA / SW-MSA)
+# ----------------------
+class SwinBlock(nn.Module):
+    def __init__(self, dim: int, input_resolution: Tuple[int, int], num_heads: int,
+                 window_size: int = 7, shift_size: int = 0, mlp_ratio: float = 4.0):
         super().__init__()
         H, W = input_resolution
         self.dim = dim
-        self.H = H
-        self.W = W
+        self.H, self.W = H, W
         self.window_size = window_size
         self.shift_size = shift_size
         self.num_heads = num_heads
 
-        assert 0 <= self.shift_size < self.window_size, "shift_size must be in [0, window_size)"
+        assert 0 <= self.shift_size < self.window_size
 
         self.norm1 = nn.LayerNorm(dim)
-        self.attn = WindowAttentionV2(dim, window_size, num_heads)
-
+        self.attn = WindowAttention(dim, window_size, num_heads)
         self.norm2 = nn.LayerNorm(dim)
-        hidden = int(dim * mlp_ratio)
-        self.mlp = nn.Sequential(
-            nn.Linear(dim, hidden),
-            nn.GELU(),
-            nn.Linear(hidden, dim)
-        )
+        self.mlp = MLP(dim, mlp_ratio)
 
-        # precompute attention mask for shifted windows (fixed H,W for this stage)
+        # precompute mask for SW-MSA
         if self.shift_size > 0:
-            self.register_buffer("attn_mask", self._create_attn_mask(H, W, window_size, shift_size), persistent=False)
+            self.register_buffer("attn_mask", self._create_mask(H, W, window_size, shift_size), persistent=False)
         else:
             self.attn_mask = None
 
     @staticmethod
-    def _create_attn_mask(H: int, W: int, window_size: int, shift_size: int):
-        # Build an attention mask that prevents tokens from attending across
-        # different originally-partitioned windows after cyclic shift.
-        img_mask = torch.zeros((1, H, W, 1))  # (1,H,W,1)
+    def _create_mask(H: int, W: int, window_size: int, shift_size: int):
+        img_mask = torch.zeros((1, H, W, 1))
         cnt = 0
-        for h in (slice(0, -window_size), slice(-window_size, -shift_size), slice(-shift_size, None)):
-            for w in (slice(0, -window_size), slice(-window_size, -shift_size), slice(-shift_size, None)):
+        h_slices = (slice(0, -window_size), slice(-window_size, -shift_size), slice(-shift_size, None))
+        w_slices = (slice(0, -window_size), slice(-window_size, -shift_size), slice(-shift_size, None))
+        for h in h_slices:
+            for w in w_slices:
                 img_mask[:, h, w, :] = cnt
                 cnt += 1
-
-        mask_windows = window_partition(img_mask, window_size)  # (nW, win, win, 1)
-        mask_windows = mask_windows.view(-1, window_size * window_size)
-        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)  # (nW, N, N)
+        mask_windows = window_partition(img_mask, window_size).view(-1, window_size * window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
         attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, 0.0)
-        return attn_mask  # (num_windows, N, N)
+        return attn_mask
 
     def forward(self, x):
-        """
-        x: (B, H*W, C) for a fixed stage resolution
-        """
         B, L, C = x.shape
         H, W = self.H, self.W
         assert L == H * W, "Input feature has wrong size"
@@ -235,234 +158,181 @@ class SwinBlockV2(nn.Module):
         x = self.norm1(x)
         x = x.view(B, H, W, C)
 
-        # cyclic shift if needed
+        # cyclic shift
         if self.shift_size > 0:
             x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
 
-        # partition windows
-        x_windows = window_partition(x, self.window_size)  # (B*nW, win, win, C)
-        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # (B*nW, N, C)
-
-        # window attention
-        attn_windows = self.attn(x_windows, attn_mask=self.attn_mask)  # (B*nW, N, C)
-
-        # reverse windows
+        # window
+        x_windows = window_partition(x, self.window_size).view(-1, self.window_size * self.window_size, C)
+        attn_windows = self.attn(x_windows, attn_mask=self.attn_mask)
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-        x = window_reverse(attn_windows, self.window_size, H, W)  # (B,H,W,C)
+        x = window_reverse(attn_windows, self.window_size, H, W)
 
-        # reverse cyclic shift
+        # reverse shift
         if self.shift_size > 0:
             x = torch.roll(x, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
 
         x = x.view(B, H * W, C)
-        x = shortcut + x  # residual 1
-
-        # MLP
-        x = x + self.mlp(self.norm2(x))  # residual 2
+        x = shortcut + x
+        x = x + self.mlp(self.norm2(x))
         return x
 
 
-# ---------------------------
-# Patch embedding / merging / expansion
-# ---------------------------
-
+# ----------------------
+# Patch embed / merging / expand
+# ----------------------
 class PatchEmbed(nn.Module):
-    """Image -> patch tokens"""
     def __init__(self, in_chans=1, embed_dim=96, patch_size=4):
         super().__init__()
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
         self.norm = nn.LayerNorm(embed_dim)
 
     def forward(self, x):
-        # x: (B,1,H,W) -> (B, H/ps*W/ps, C)
-        x = self.proj(x)  # (B, C, H/ps, W/ps)
+        x = self.proj(x)  # B,C,H/ps,W/ps
         B, C, H, W = x.shape
         x = x.permute(0, 2, 3, 1).contiguous().view(B, H * W, C)
-        x = self.norm(x)
-        return x, (H, W)
+        return self.norm(x), (H, W)
 
 
 class PatchMerging(nn.Module):
-    """Downsample by 2 via concat of 2x2 neighborhood then linear reduce."""
     def __init__(self, input_resolution: Tuple[int, int], dim: int):
         super().__init__()
-        H, W = input_resolution
-        self.H, self.W = H, W
+        self.H, self.W = input_resolution
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = nn.LayerNorm(4 * dim)
 
     def forward(self, x):
-        # x: (B, H*W, C)
         B, L, C = x.shape
         H, W = self.H, self.W
         assert L == H * W
         x = x.view(B, H, W, C)
-
-        # 2x2 concat
         x0 = x[:, 0::2, 0::2, :]
         x1 = x[:, 1::2, 0::2, :]
         x2 = x[:, 0::2, 1::2, :]
         x3 = x[:, 1::2, 1::2, :]
-        x = torch.cat([x0, x1, x2, x3], dim=-1)  # (B, H/2, W/2, 4C)
-
-        x = x.view(B, -1, 4 * C)
+        x = torch.cat([x0, x1, x2, x3], dim=-1).view(B, -1, 4 * C)
         x = self.norm(x)
-        x = self.reduction(x)  # -> (B, H/2*W/2, 2C)
+        x = self.reduction(x)  # (B, H/2*W/2, 2C)
         return x, (H // 2, W // 2)
 
 
 class PatchExpand(nn.Module):
-    """Upsample by 2 (inverse of PatchMerging) using a linear map + pixel shuffle logic."""
     def __init__(self, input_resolution: Tuple[int, int], dim: int):
         super().__init__()
-        H, W = input_resolution
-        self.H, self.W = H, W
-        self.expand = nn.Linear(dim, 2 * dim, bias=False)  # prepare for 2x2
-        self.norm = nn.LayerNorm(dim // 2)  # after shuffle channels halve
+        self.H, self.W = input_resolution
+        self.expand = nn.Linear(dim, 2 * dim, bias=False)
+        self.norm = nn.LayerNorm(dim // 2)
 
     def forward(self, x):
-        # x: (B, H*W, C)
         B, L, C = x.shape
         H, W = self.H, self.W
         assert L == H * W
-        x = self.expand(x)  # (B, H*W, 2C)
-
-        # rearrange to spatial upsample by 2
-        x = x.view(B, H, W, 2 * C).permute(0, 3, 1, 2).contiguous()  # (B, 2C, H, W)
-        x = F.pixel_shuffle(x, upscale_factor=2)  # (B, C/2, 2H, 2W)
-
+        x = self.expand(x)  # B, H*W, 2C
+        x = x.view(B, H, W, 2 * C).permute(0, 3, 1, 2).contiguous()
+        x = F.pixel_shuffle(x, 2)  # B, C/2, 2H, 2W
         B, C2, H2, W2 = x.shape
         x = x.permute(0, 2, 3, 1).contiguous().view(B, H2 * W2, C2)
-        x = self.norm(x)
-        return x, (H2, W2)
+        return self.norm(x), (H2, W2)
 
 
-# ---------------------------
-# Basic Swin V2 Stage (stack W-MSA/SW-MSA)
-# ---------------------------
-
+# ----------------------
+# Basic encoder/decoder layers
+# ----------------------
 class BasicLayer(nn.Module):
     def __init__(self, dim, input_resolution, depth, num_heads, window_size=7, downsample=True):
         super().__init__()
-        self.dim = dim
-        self.input_resolution = input_resolution
-        self.blocks = nn.ModuleList()
         H, W = input_resolution
-        for i in range(depth):
-            shift = 0 if (i % 2 == 0) else window_size // 2
-            self.blocks.append(
-                SwinBlockV2(dim, (H, W), num_heads=num_heads, window_size=window_size, shift_size=shift)
-            )
-        self.downsample = PatchMerging(input_resolution, dim) if downsample else None
+        self.blocks = nn.ModuleList([
+            SwinBlock(dim, (H, W), num_heads, window_size, shift_size=0 if i % 2 == 0 else window_size // 2)
+            for i in range(depth)
+        ])
+        self.downsample = PatchMerging((H, W), dim) if downsample else None
 
     def forward(self, x):
         for blk in self.blocks:
             x = blk(x)
-        new_size = self.input_resolution
+        size = self.blocks[0].H, self.blocks[0].W
         if self.downsample is not None:
-            x, new_size = self.downsample(x)
-        return x, new_size
+            x, size = self.downsample(x)
+        return x, size
 
 
 class BasicLayerUp(nn.Module):
-    """Decoder mirror: Swin blocks at current res + optional upsample."""
     def __init__(self, dim, input_resolution, depth, num_heads, window_size=7, upsample=True):
         super().__init__()
-        self.dim = dim
-        self.input_resolution = input_resolution
-        self.blocks = nn.ModuleList()
         H, W = input_resolution
-        for i in range(depth):
-            shift = 0 if (i % 2 == 0) else window_size // 2
-            self.blocks.append(
-                SwinBlockV2(dim, (H, W), num_heads=num_heads, window_size=window_size, shift_size=shift)
-            )
-        self.upsample = PatchExpand(input_resolution, dim) if upsample else None
+        self.blocks = nn.ModuleList([
+            SwinBlock(dim, (H, W), num_heads, window_size, shift_size=0 if i % 2 == 0 else window_size // 2)
+            for i in range(depth)
+        ])
+        self.upsample = PatchExpand((H, W), dim) if upsample else None
 
     def forward(self, x):
         for blk in self.blocks:
             x = blk(x)
-        new_size = self.input_resolution
+        size = self.blocks[0].H, self.blocks[0].W
         if self.upsample is not None:
-            x, new_size = self.upsample(x)
-        return x, new_size
+            x, size = self.upsample(x)
+        return x, size
 
 
-# ---------------------------
-# Full model: Swin-UNet-V2-min
-# ---------------------------
-
+# ----------------------
+# Swin-UNet (original-style, minimal)
+# ----------------------
 class SwinUNet(nn.Module):
     def __init__(self,
-                 img_size=256, in_chans=1, out_chans=1,
+                 img_size=224, in_chans=1, out_chans=1,
                  embed_dim=96, patch_size=4, window_size=7,
-                 depths=(2, 2, 2, 2), heads=(3, 6, 12, 24)):
+                 depths=(2, 2, 2, 2), num_heads=(3, 6, 12, 24)):
         super().__init__()
-
-        # Patch embedding
-        self.patch_embed = PatchEmbed(in_chans, embed_dim, patch_size)
         H = W = img_size // patch_size
+        self.patch_embed = PatchEmbed(in_chans, embed_dim, patch_size)
 
-        # Encoder stages
-        self.layer1 = BasicLayer(embed_dim, (H, W), depth=depths[0], num_heads=heads[0],
-                                 window_size=window_size, downsample=True)
-        self.layer2 = BasicLayer(embed_dim * 2, (H // 2, W // 2), depth=depths[1], num_heads=heads[1],
-                                 window_size=window_size, downsample=True)
-        self.layer3 = BasicLayer(embed_dim * 4, (H // 4, W // 4), depth=depths[2], num_heads=heads[2],
-                                 window_size=window_size, downsample=True)
-        # bottom (no downsample)
-        self.layer4 = BasicLayer(embed_dim * 8, (H // 8, W // 8), depth=depths[3], num_heads=heads[3],
-                                 window_size=window_size, downsample=False)
+        # Encoder
+        self.layer1 = BasicLayer(embed_dim, (H, W), depths[0], num_heads[0], window_size, downsample=True)
+        self.layer2 = BasicLayer(embed_dim * 2, (H // 2, W // 2), depths[1], num_heads[1], window_size, downsample=True)
+        self.layer3 = BasicLayer(embed_dim * 4, (H // 4, W // 4), depths[2], num_heads[2], window_size, downsample=True)
+        self.layer4 = BasicLayer(embed_dim * 8, (H // 8, W // 8), depths[3], num_heads[3], window_size, downsample=False)
 
-        # Decoder stages (mirror), with skip connections
-        self.up3 = BasicLayerUp(embed_dim * 8, (H // 8, W // 8), depth=1, num_heads=heads[3],
-                                window_size=window_size, upsample=True)
+        # Decoder + skip fusions (Linear to reduce channels after concat)
+        self.up3 = BasicLayerUp(embed_dim * 8, (H // 8, W // 8), depth=1, num_heads=num_heads[3], window_size=window_size, upsample=True)
         self.fuse3 = nn.Linear(embed_dim * 4 + embed_dim * 4, embed_dim * 4)
 
-        self.up2 = BasicLayerUp(embed_dim * 4, (H // 4, W // 4), depth=1, num_heads=heads[2],
-                                window_size=window_size, upsample=True)
+        self.up2 = BasicLayerUp(embed_dim * 4, (H // 4, W // 4), depth=1, num_heads=num_heads[2], window_size=window_size, upsample=True)
         self.fuse2 = nn.Linear(embed_dim * 2 + embed_dim * 2, embed_dim * 2)
 
-        self.up1 = BasicLayerUp(embed_dim * 2, (H // 2, W // 2), depth=1, num_heads=heads[1],
-                                window_size=window_size, upsample=True)
+        self.up1 = BasicLayerUp(embed_dim * 2, (H // 2, W // 2), depth=1, num_heads=num_heads[1], window_size=window_size, upsample=True)
         self.fuse1 = nn.Linear(embed_dim + embed_dim, embed_dim)
 
-        # head: bring tokens back to image
+        # Reconstruction head
         self.norm_out = nn.LayerNorm(embed_dim)
         self.proj_out = nn.Conv2d(embed_dim, out_chans, kernel_size=1)
 
+        self.img_size = img_size
+        self.patch_size = patch_size
+
     def forward(self, x):
-        """
-        x: (B,1,256,256) -> (B,1,256,256)
-        """
+        # x: (B, in_chans, H, W)
         B = x.size(0)
-        # Embed
-        x, (H, W) = self.patch_embed(x)                     # (B, H*W, C)
+        x0, (H, W) = self.patch_embed(x)              # (B, H*W, C)
+        x1, s1 = self.layer1(x0)                      # (B, H/2*W/2, 2C)
+        x2, s2 = self.layer2(x1)                      # (B, H/4*W/4, 4C)
+        x3, s3 = self.layer3(x2)                      # (B, H/8*W/8, 8C)
+        xb, sb = self.layer4(x3)                      # bottleneck (no downsample)
 
-        # Encoder + save skips (token domain)
-        x1, sz1 = self.layer1(x)                            # -> (B, H/2*W/2, 2C)
-        x2, sz2 = self.layer2(x1)                           # -> (B, H/4*W/4, 4C)
-        x3, sz3 = self.layer3(x2)                           # -> (B, H/8*W/8, 8C)
-        xb, szb = self.layer4(x3)                           # -> (B, H/8*W/8, 8C)
+        y3, _ = self.up3(xb)                          # -> H/4,W/4,C=4C
+        y3 = self.fuse3(torch.cat([y3, x2], dim=-1))
 
-        # Decoder with skips (concat then fuse by Linear)
-        y3, s3 = self.up3(xb)                               # up to H/4,W/4 with C=4C
-        y3 = torch.cat([y3, x2], dim=-1)
-        y3 = self.fuse3(y3)
+        y2, _ = self.up2(y3)                          # -> H/2,W/2,C=2C
+        y2 = self.fuse2(torch.cat([y2, x1], dim=-1))
 
-        y2, s2 = self.up2(y3)                               # up to H/2,W/2 with C=2C
-        y2 = torch.cat([y2, x1], dim=-1)
-        y2 = self.fuse2(y2)
+        y1, _ = self.up1(y2)                          # -> H,W,C=C
+        y1 = self.fuse1(torch.cat([y1, x0], dim=-1))  # (B, H*W, C)
 
-        y1, s1 = self.up1(y2)                               # up to H,W with C=C
-        y1 = torch.cat([y1, x], dim=-1)
-        y1 = self.fuse1(y1)                                 # (B, H*W, C)
-
-        # tokens -> image
-        y = self.norm_out(y1)
-        y = y.view(B, H, W, -1).permute(0, 3, 1, 2).contiguous()  # (B, C, H, W)
-        y = F.interpolate(y, scale_factor=4, mode="nearest")  # restore to 256x256 (undo initial patch=4)
-        y = self.proj_out(y)  # (B, 1, 256, 256)
+        # tokens -> logits map at patch resolution, then upsample back to img_size
+        y = self.norm_out(y1).view(B, H, W, -1).permute(0, 3, 1, 2).contiguous()  # B,C,H/ps,W/ps
+        y = F.interpolate(y, scale_factor=self.patch_size, mode="bilinear", align_corners=False)
+        y = self.proj_out(y)  # (B, num_classes, img_size, img_size)
         return y
 
 
@@ -507,3 +377,9 @@ class ReconLoss(nn.Module):
 
     def forward(self, pred, target):
         return self.w_l1 * self.l1(pred, target) + self.w_ssim * self.ssim(pred, target)
+
+
+def build_swin_unet_tiny(img_size=224, in_chans=1, out_chans=1):
+    return SwinUNet(img_size=img_size, in_chans=in_chans, out_chans=out_chans,
+                    embed_dim=96, depths=(2,2,2,2), num_heads=(3,6,12,24),
+                    window_size=7, patch_size=4)
