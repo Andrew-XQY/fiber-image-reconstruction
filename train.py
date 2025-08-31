@@ -108,12 +108,15 @@ elif experiment_name == "U_Net":
         final_activation=config["model"]["final_activation"],
     )
 elif experiment_name == "SwinT":
-    from models.SwinT import SwinUNet
-    model = SwinUNet(
-        in_chans=config["model"]["in_chans"],
-        out_chans=config["model"]["out_chans"],
-        use_skips=config["model"]["use_skips"],
-    )
+    from models.SwinT import SwinUNet, ReconLoss
+    # model = SwinUNet(
+    #     in_chans=config["model"]["in_chans"],
+    #     out_chans=config["model"]["out_chans"],
+    #     use_skips=config["model"]["use_skips"],
+    # )
+    
+    model = SwinUNet(window_size=8)
+
 elif experiment_name == "Pix2pix":
     from models.Pix2pix import Generator, Discriminator, Pix2PixLosses
     G = Generator(channels=config["model"]["channels"])
@@ -138,6 +141,18 @@ if experiment_name == "Pix2pix":
     D = D.to(device)
     show_model_info(G)
     show_model_info(D)
+elif experiment_name == "SwinT":
+    # Loss: L1 + 0.3*SSIM
+    criterion = ReconLoss(w_l1=1.0, w_ssim=0.3, w_perc=0.0, use_perc=False)
+    # Optimizer: AdamW with recommended params
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=2e-4,
+        betas=(0.9, 0.999),
+        eps=1e-8,
+        weight_decay=0.01
+    )
+    
 else:
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
