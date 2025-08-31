@@ -466,7 +466,6 @@ class SwinUNet(nn.Module):
         return y
 
 
-# ----------------------------- loss function -----------------------------
 # --- SSIM (simplified single-scale) ---
 class SSIM(nn.Module):
     def __init__(self, window_size=11, C1=0.01**2, C2=0.03**2):
@@ -474,25 +473,28 @@ class SSIM(nn.Module):
         self.window_size = window_size
         self.C1, self.C2 = C1, C2
 
-        gauss = torch.tensor([torch.exp(-((x - (window_size-1)/2)**2) / (2*1.5**2)) for x in range(window_size)])
+        gauss = torch.tensor([
+            math.exp(-((x - (window_size - 1) / 2) ** 2) / (2 * 1.5 ** 2))
+            for x in range(window_size)
+        ])
         gauss = (gauss / gauss.sum()).float()
-        window_1d = gauss.view(1,1,-1)
-        window_2d = (window_1d.transpose(2,1) @ window_1d).unsqueeze(0).unsqueeze(0)
+        window_1d = gauss.view(1, 1, -1)
+        window_2d = (window_1d.transpose(2, 1) @ window_1d).unsqueeze(0).unsqueeze(0)
         self.register_buffer("window", window_2d)
 
     def _filter(self, x):
         C = x.size(1)
-        w = self.window.expand(C,1,self.window_size,self.window_size)
-        return F.conv2d(x, w, padding=self.window_size//2, groups=C)
+        w = self.window.expand(C, 1, self.window_size, self.window_size)
+        return F.conv2d(x, w, padding=self.window_size // 2, groups=C)
 
     def forward(self, x, y):
         mu_x = self._filter(x); mu_y = self._filter(y)
-        sigma_x = self._filter(x*x) - mu_x**2
-        sigma_y = self._filter(y*y) - mu_y**2
-        sigma_xy = self._filter(x*y) - mu_x*mu_y
-        ssim = ((2*mu_x*mu_y + self.C1)*(2*sigma_xy + self.C2)) / ((mu_x**2 + mu_y**2 + self.C1)*(sigma_x + sigma_y + self.C2))
-        return 1 - ssim.mean()   # as a loss
-        
+        sigma_x = self._filter(x * x) - mu_x ** 2
+        sigma_y = self._filter(y * y) - mu_y ** 2
+        sigma_xy = self._filter(x * y) - mu_x * mu_y
+        ssim = ((2 * mu_x * mu_y + self.C1) * (2 * sigma_xy + self.C2)) / (
+               (mu_x ** 2 + mu_y ** 2 + self.C1) * (sigma_x + sigma_y + self.C2))
+        return 1 - ssim.mean()  # as a loss
 
 # --- Composite L1 + SSIM loss ---
 class ReconLoss(nn.Module):
