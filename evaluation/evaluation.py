@@ -792,7 +792,7 @@ def plot_history_curves(folder: str,
     else:
         ax.tick_params(axis="both", which="major", direction="in", top=True, right=True)
     fig.tight_layout()
-    fig.savefig(pdf_path, bbox_inches="tight")
+    fig.savefig(pdf_path, bbox_inches="tight", transparent=True)
     plt.close(fig)
 
     return str(pdf_path)
@@ -956,7 +956,7 @@ def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_di
 
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     pdf_path = out / "metrics_by_model_barplot.pdf"
-    fig.savefig(pdf_path, format="pdf")
+    fig.savefig(pdf_path, format="pdf", transparent=True)
     plt.show()
     return str(pdf_path)
 
@@ -1380,7 +1380,7 @@ def plot_metric_box_by_model_csv(
     fig.tight_layout()
     out_dir_path = Path(out_dir); out_dir_path.mkdir(parents=True, exist_ok=True)
     pdf_path = out_dir_path.joinpath(f"{metric}_by_model_boxplot.pdf")
-    fig.savefig(str(pdf_path), format="pdf", bbox_inches="tight")
+    fig.savefig(str(pdf_path), format="pdf", bbox_inches="tight", transparent=True)
     plt.close(fig)
     print(f"Saved: {pdf_path}")
     return str(pdf_path)
