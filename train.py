@@ -108,16 +108,17 @@ elif experiment_name == "U_Net":
         final_activation=config["model"]["final_activation"],
     )
 elif experiment_name == "SwinT":
-    from models.SwinT import SwinUNet, ReconLoss, build_swin_unet_tiny
-    # model = SwinUNet(
-    #     in_chans=config["model"]["in_chans"],
-    #     out_chans=config["model"]["out_chans"],
-    #     use_skips=config["model"]["use_skips"],
-    # )
-    # model = SwinUNet(window_size=8)
-    
-    model = build_swin_unet_tiny() 
-
+    from models.SwinT import SwinUNet, ReconLoss
+    model = SwinUNet(
+        img_size=config['model']['img_size'],
+        in_chans=config['model']['in_chans'],
+        out_chans=config['model']['out_chans'],
+        embed_dim=config['model']['embed_dim'],
+        depths=config['model']['depths'],
+        num_heads=config['model']['num_heads'],
+        window_size=config['model']['window_size'],
+        patch_size=config['model']['patch_size'],
+    )
 elif experiment_name == "Pix2pix":
     from models.Pix2pix import Generator, Discriminator, Pix2PixLosses
     G = Generator(channels=config["model"]["channels"])
@@ -144,10 +145,8 @@ if experiment_name == "Pix2pix":
     show_model_info(D)
 elif experiment_name == "SwinT":
     from torch.optim.lr_scheduler import LambdaLR
-
     total_steps = config['training']['epochs'] * len(train_dataset)
-    warmup_steps = int(0.1 * total_steps)
-    
+    warmup_steps = int(config['training']['warmup_ratio'] * total_steps)
     def lr_lambda(step):
         if step < warmup_steps:
             return (step + 1) / max(1, warmup_steps)
@@ -155,12 +154,14 @@ elif experiment_name == "SwinT":
         return 0.5 * (1.0 + math.cos(math.pi * t))
 
     model = model.to(device)
-    criterion = ReconLoss(w_l1=1.0, w_ssim=0.3) # Loss: L1 + 0.3*SSIM
+    criterion = ReconLoss(w_l1=config['training']['w_l1'], w_ssim=config['training']['w_ssim']) # Loss: L1 + 0.3*SSIM
+
     # Optimizer: AdamW with recommended params
     base_lr = 4e-4 if config['training']['batch_size'] >= 64 else 2e-4
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=base_lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01
+        lr=base_lr, betas=config['training']['betas'],
+        eps=config['training']['eps'], weight_decay=config['training']['weight_decay']
     )
     scheduler = LambdaLR(optimizer, lr_lambda)
     show_model_info(model)
@@ -181,7 +182,6 @@ from xflow.extensions.physics.beam import extract_beam_parameters
 
 # 1) loss/optimizer
 criterion = torch.nn.MSELoss()
-
 
 # 2) callbacks (unchanged) + any custom wiring
 callbacks = build_callbacks_from_config(
