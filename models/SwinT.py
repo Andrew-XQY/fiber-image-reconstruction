@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
+import os
 import math
 
 # ----------------------
@@ -181,12 +182,19 @@ class SwinBlock(nn.Module):
 # ----------------------
 # Patch embed / merging / expand
 # ----------------------
+# class PatchEmbed(nn.Module):
+#     def __init__(self, in_chans=1, embed_dim=96, patch_size=4):
+#         super().__init__()
+#         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+#         self.norm = nn.LayerNorm(embed_dim)
+
 class PatchEmbed(nn.Module):
     def __init__(self, in_chans=1, embed_dim=96, patch_size=4):
         super().__init__()
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        # change only this line: kernel_size=7, padding=3 (overlaps), keep stride=patch_size
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=7, stride=patch_size, padding=3, bias=True)
         self.norm = nn.LayerNorm(embed_dim)
-
+        
     def forward(self, x):
         x = self.proj(x)  # B,C,H/ps,W/ps
         B, C, H, W = x.shape
@@ -306,6 +314,12 @@ class SwinUNet(nn.Module):
 
         # Reconstruction head
         self.norm_out = nn.LayerNorm(embed_dim)
+        # NEW: light post-conv to blend window boundaries at token resolution
+        self.post = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim, 3, padding=1, bias=False),
+            nn.GELU(),
+            nn.Conv2d(embed_dim, embed_dim, 3, padding=1, bias=False),
+        )
         self.proj_out = nn.Conv2d(embed_dim, out_chans, kernel_size=1)
 
         self.img_size = img_size
@@ -331,9 +345,80 @@ class SwinUNet(nn.Module):
 
         # tokens -> logits map at patch resolution, then upsample back to img_size
         y = self.norm_out(y1).view(B, H, W, -1).permute(0, 3, 1, 2).contiguous()  # B,C,H/ps,W/ps
+        y = self.post(y)  # <-- NEW: mixes across windows at token grid
         y = F.interpolate(y, scale_factor=self.patch_size, mode="bilinear", align_corners=False)
         y = self.proj_out(y)  # (B, num_classes, img_size, img_size)
         return y
+    
+    def save_model(self, save_dir: str, model_name: str = "model") -> str:
+        """
+        Saves weights + constructor config into a single .pth file.
+
+        Args:
+            save_dir (str): Directory to save the checkpoint.
+            model_name (str): Base filename without extension.
+
+        Returns:
+            str: Full path to the saved file.
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        ckpt_path = os.path.join(save_dir, f"{model_name}.pth")
+
+        config = dict(
+            img_size=self.img_size,
+            in_chans=getattr(self, "in_chans", 1),
+            out_chans=getattr(self, "out_chans", 1),
+            embed_dim=getattr(self, "embed_dim", 96),
+            patch_size=self.patch_size,
+            window_size=getattr(self, "window_size", 7),
+            depths=getattr(self, "depths", (2, 2, 2, 2)),
+            num_heads=getattr(self, "num_heads", (3, 6, 12, 24)),
+        )
+
+        torch.save(
+            {
+                "class_name": self.__class__.__name__,
+                "torch_version": torch.__version__,
+                "config": config,
+                "state_dict": self.state_dict(),
+            },
+            ckpt_path,
+        )
+        return ckpt_path
+
+    @classmethod
+    def load_model(
+        cls,
+        filepath: str,
+        device: Optional[Union[str, torch.device]] = None,
+        eval_mode: bool = True,
+    ) -> "SwinUNet":
+        """
+        Loads a SwinUNet from a checkpoint saved by save_model().
+
+        Args:
+            filepath (str): Path to .pth file.
+            device (Optional[Union[str, torch.device]]): map_location for torch.load and model.to().
+            eval_mode (bool): If True, calls model.eval().
+
+        Returns:
+            SwinUNet: Loaded model instance.
+        """
+        map_loc = device if device is not None else "cpu"
+        ckpt = torch.load(filepath, map_location=map_loc)
+
+        cfg = ckpt.get("config", {})
+        model = cls(**cfg)  # re-create with saved constructor args
+        if device is not None:
+            model = model.to(device)
+
+        missing, unexpected = model.load_state_dict(ckpt["state_dict"], strict=False)
+        if missing or unexpected:
+            print(f"[load_model] missing keys: {missing}\nunexpected keys: {unexpected}")
+
+        if eval_mode:
+            model.eval()
+        return model
 
 
 # --- SSIM (simplified single-scale) ---
@@ -377,9 +462,3 @@ class ReconLoss(nn.Module):
 
     def forward(self, pred, target):
         return self.w_l1 * self.l1(pred, target) + self.w_ssim * self.ssim(pred, target)
-
-
-def build_swin_unet_tiny(img_size=224, in_chans=1, out_chans=1):
-    return SwinUNet(img_size=img_size, in_chans=in_chans, out_chans=out_chans,
-                    embed_dim=96, depths=(2,2,2,2), num_heads=(3,6,12,24),
-                    window_size=7, patch_size=4)
