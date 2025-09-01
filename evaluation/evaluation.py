@@ -958,7 +958,17 @@ def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_di
     pdf_path = out / "metrics_by_model_barplot.pdf"
     fig.savefig(pdf_path, format="pdf", transparent=True)
     plt.show()
-    return str(pdf_path)
+    
+    # Return dictionary with final metric values
+    result_dict = {}
+    for model in models:
+        result_dict[model] = {}
+        for metric in metrics:
+            mean_val = avg[(model, metric)]
+            std_val = err[(model, metric)]
+            result_dict[model][metric] = f"{mean_val:.6f} ± {std_val:.6f}"
+    
+    return result_dict
 
 
 

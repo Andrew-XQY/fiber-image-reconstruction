@@ -322,8 +322,15 @@ class SwinUNet(nn.Module):
         )
         self.proj_out = nn.Conv2d(embed_dim, out_chans, kernel_size=1)
 
+        # Store all constructor parameters as instance attributes for save/load
         self.img_size = img_size
+        self.in_chans = in_chans
+        self.out_chans = out_chans
+        self.embed_dim = embed_dim
         self.patch_size = patch_size
+        self.window_size = window_size
+        self.depths = depths
+        self.num_heads = num_heads
 
     def forward(self, x):
         # x: (B, in_chans, H, W)
@@ -366,13 +373,13 @@ class SwinUNet(nn.Module):
 
         config = dict(
             img_size=self.img_size,
-            in_chans=getattr(self, "in_chans", 1),
-            out_chans=getattr(self, "out_chans", 1),
-            embed_dim=getattr(self, "embed_dim", 96),
+            in_chans=self.in_chans,
+            out_chans=self.out_chans,
+            embed_dim=self.embed_dim,
             patch_size=self.patch_size,
-            window_size=getattr(self, "window_size", 7),
-            depths=getattr(self, "depths", (2, 2, 2, 2)),
-            num_heads=getattr(self, "num_heads", (3, 6, 12, 24)),
+            window_size=self.window_size,
+            depths=self.depths,
+            num_heads=self.num_heads,
         )
 
         torch.save(
