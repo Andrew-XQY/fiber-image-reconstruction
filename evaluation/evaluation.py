@@ -629,7 +629,8 @@ def plot_history_curves(folder: str,
                         use_line_styles: bool = False,
                         show_grid: bool = False,
                         line_width: float = 1.8,
-                        advanced_smooth: int | None = None) -> str:
+                        advanced_smooth: int | None = None,
+                        show_legend: bool = True) -> str:
     """
     Group *_history.json by the first token before '-'. For each group, compute an epoch-wise
     average of `metrics` across runs (using only runs that contain that epoch). Plot ONE line per group.
@@ -781,7 +782,7 @@ def plot_history_curves(folder: str,
     if show_grid:
         ax.grid(True, linestyle="--", color="#cccccc", alpha=0.5, axis="both")
     # legend without frame
-    if len(groups) > 1:
+    if show_legend and len(groups) > 1:
         ax.legend(loc="best", fontsize=8, frameon=False)
     # Add minor ticks and ticks on all four axes if requested
     if show_minor_ticks:
@@ -865,7 +866,7 @@ def plot_metric_box_by_model(root_dir: str, metric: str, out_dir: str, show_grid
 
     return str(pdf_path)
 
-def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_dir: str, with_std: bool = True):
+def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_dir: str, with_std: bool = True, sort_by_mae: bool = False):
     """
     Scan `root_dir` recursively for MODEL-YYYYMMDDhhmmss_summary.json.
     For each metric in `metrics`, read `<metric>_avg` and `<metric>_std`,
@@ -898,12 +899,24 @@ def plot_metrics_grouped_bars_by_model(root_dir: str, metrics: list[str], out_di
     if not models:
         print("No models have all requested metrics.")
         return None
-    # Replace underscores with hyphens for visualization
-    vis_models = [m.replace('_', '-') for m in models]
-
-    # aggregates
+    
+    # aggregates (calculate before sorting)
     avg = {(m, met): sum(values[(m, met)]) / len(values[(m, met)]) for m in models for met in metrics}
     err = {(m, met): sum(stds[(m, met)]) / len(stds[(m, met)])     for m in models for met in metrics}
+    
+    # Sort by MAE if requested, otherwise keep current order
+    if sort_by_mae:
+        # Find MAE metric (case insensitive)
+        mae_metric = None
+        for met in metrics:
+            if 'mae' in met.lower():
+                mae_metric = met
+                break
+        if mae_metric:
+            models = sorted(models, key=lambda m: avg[(m, mae_metric)])
+    
+    # Replace underscores with hyphens for visualization
+    vis_models = [m.replace('_', '-') for m in models]
 
     # plot
     K = len(metrics)
@@ -1232,7 +1245,8 @@ def plot_metric_box_by_model_csv(
     use_symlog: bool = False,         # optional heavy-tail y-scale
     symlog_linthresh: float = 1e-2,   # linear threshold for symlog
     box_width: float = 0.45,          # width of the box in boxplot
-    hist_alpha: float = 0.25          # transparency of histogram bins
+    hist_alpha: float = 0.25,         # transparency of histogram bins
+    sort_by_mae: bool = False         # sort models by MAE metric values
 ):
     # --- load & group ---
     root = Path(root_dir)
@@ -1292,7 +1306,11 @@ def plot_metric_box_by_model_csv(
         return None
 
     # order + labels
-    models = sorted(model_data.keys(), key=lambda s: s.lower())
+    if sort_by_mae and 'mae' in metric.lower():
+        # Sort by mean values of the current metric (ascending order for MAE)
+        models = sorted(model_data.keys(), key=lambda m: np.mean(model_data[m]))
+    else:
+        models = sorted(model_data.keys(), key=lambda s: s.lower())
     data = [model_data[m] for m in models]
     vis_labels = [m.replace("_", "-") for m in models]
 
