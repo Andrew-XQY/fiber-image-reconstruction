@@ -5,6 +5,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+from matplotlib.ticker import AutoMinorLocator
 
 import torch
 from pathlib import Path
@@ -630,7 +631,8 @@ def plot_history_curves(folder: str,
                         show_grid: bool = False,
                         line_width: float = 1.8,
                         advanced_smooth: int | None = None,
-                        show_legend: bool = True) -> str:
+                        show_legend: bool = True,
+                        show_small_ticks: bool = False) -> str:
     """
     Group *_history.json by the first token before '-'. For each group, compute an epoch-wise
     average of `metrics` across runs (using only runs that contain that epoch). Plot ONE line per group.
@@ -641,6 +643,13 @@ def plot_history_curves(folder: str,
         out_dir: Output directory for the PDF
         epoch_range: Optional [start_idx, end_idx] (0-based, inclusive). If None, plot full length.
         smooth: If True, plot a smoothed curve (moving average); otherwise plot raw line.
+        show_minor_ticks: If True, show minor ticks on axes (legacy parameter).
+        use_line_styles: If True, use different line styles for each model.
+        show_grid: If True, show grid lines.
+        line_width: Width of the plotted lines.
+        advanced_smooth: If provided, use Savitzky-Golay smoothing with this window length for MAE metrics.
+        show_legend: If True, show legend.
+        show_small_ticks: If True, enable both major and minor ticks on all axes.
 
     Returns:
         Path to the saved PDF.
@@ -785,9 +794,9 @@ def plot_history_curves(folder: str,
     if show_legend and len(groups) > 1:
         ax.legend(loc="best", fontsize=8, frameon=False)
     # Add minor ticks and ticks on all four axes if requested
-    if show_minor_ticks:
-        ax.xaxis.set_minor_locator(plt.AutoMinorLocator())
-        ax.yaxis.set_minor_locator(plt.AutoMinorLocator())
+    if show_small_ticks or show_minor_ticks:
+        ax.xaxis.set_minor_locator(AutoMinorLocator())
+        ax.yaxis.set_minor_locator(AutoMinorLocator())
         ax.tick_params(axis="both", which="minor", length=4, direction="in", top=True, right=True)
         ax.tick_params(axis="both", which="major", length=7, direction="in", top=True, right=True)
     else:
