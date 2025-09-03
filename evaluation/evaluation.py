@@ -632,7 +632,10 @@ def plot_history_curves(folder: str,
                         line_width: float = 1.8,
                         advanced_smooth: int | None = None,
                         show_legend: bool = True,
-                        show_small_ticks: bool = False) -> str:
+                        show_small_ticks: bool = False,
+                        legend_fontsize: float = 8,
+                        frame_linewidth: float = 1.0,
+                        figsize: tuple[float, float] = (6, 4)) -> str:
     """
     Group *_history.json by the first token before '-'. For each group, compute an epoch-wise
     average of `metrics` across runs (using only runs that contain that epoch). Plot ONE line per group.
@@ -650,6 +653,9 @@ def plot_history_curves(folder: str,
         advanced_smooth: If provided, use Savitzky-Golay smoothing with this window length for MAE metrics.
         show_legend: If True, show legend.
         show_small_ticks: If True, enable both major and minor ticks on all axes.
+        legend_fontsize: Font size for the legend text.
+        frame_linewidth: Line width for the frame (spines) and tick marks.
+        figsize: Figure size as (width, height) in inches.
 
     Returns:
         Path to the saved PDF.
@@ -735,7 +741,7 @@ def plot_history_curves(folder: str,
     out_path.mkdir(parents=True, exist_ok=True)
     pdf_path = out_path / f"{metrics}.pdf"
 
-    fig, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=figsize)
     # Experienced researchers often use both color and line style to distinguish many lines.
     # Common line styles: solid, dashed, dashdot, dotted, etc.
     LINE_STYLES = ["-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 5)), (0, (1, 1)), (0, (5, 1)), (0, (3, 5, 1, 5))]
@@ -792,15 +798,20 @@ def plot_history_curves(folder: str,
         ax.grid(True, linestyle="--", color="#cccccc", alpha=0.5, axis="both")
     # legend without frame
     if show_legend and len(groups) > 1:
-        ax.legend(loc="best", fontsize=8, frameon=False)
+        ax.legend(loc="best", fontsize=legend_fontsize, frameon=False)
     # Add minor ticks and ticks on all four axes if requested
     if show_small_ticks or show_minor_ticks:
         ax.xaxis.set_minor_locator(AutoMinorLocator())
         ax.yaxis.set_minor_locator(AutoMinorLocator())
-        ax.tick_params(axis="both", which="minor", length=4, direction="in", top=True, right=True)
-        ax.tick_params(axis="both", which="major", length=7, direction="in", top=True, right=True)
+        ax.tick_params(axis="both", which="minor", length=4, direction="in", top=True, right=True, width=frame_linewidth)
+        ax.tick_params(axis="both", which="major", length=7, direction="in", top=True, right=True, width=frame_linewidth)
     else:
-        ax.tick_params(axis="both", which="major", direction="in", top=True, right=True)
+        ax.tick_params(axis="both", which="major", direction="in", top=True, right=True, width=frame_linewidth)
+    
+    # Set frame (spines) line width
+    for spine in ax.spines.values():
+        spine.set_linewidth(frame_linewidth)
+        
     fig.tight_layout()
     fig.savefig(pdf_path, bbox_inches="tight", transparent=True)
     plt.close(fig)
@@ -1255,7 +1266,8 @@ def plot_metric_box_by_model_csv(
     symlog_linthresh: float = 1e-2,   # linear threshold for symlog
     box_width: float = 0.45,          # width of the box in boxplot
     hist_alpha: float = 0.25,         # transparency of histogram bins
-    sort_by_mae: bool = False         # sort models by MAE metric values
+    sort_by_mae: bool = False,        # sort models by MAE metric values
+    figsize: tuple[float, float] = (6, 4)  # figure size as (width, height) in inches
 ):
     # --- load & group ---
     root = Path(root_dir)
@@ -1338,7 +1350,7 @@ def plot_metric_box_by_model_csv(
         overlay_data.append(ov)
 
     # --- figure ---
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
+    fig, ax = plt.subplots(figsize=figsize, dpi=150)
     ax.set_axisbelow(True)
     if show_grid:
         ax.yaxis.grid(True, linestyle="--", color="#cccccc", alpha=0.5)
