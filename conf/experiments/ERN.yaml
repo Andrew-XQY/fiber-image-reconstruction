@@ -23,6 +23,9 @@ training:
   batch_size: &batch 32                   # Number of samples per gradient update
 
 callbacks:
+  - name: "torch_total_training_time"
+    params:
+      save_dir: ${paths.output}
   - name: "torch_batch_progress_bar"
     params:
       only_keys: ["train_loss", "val_loss"]
