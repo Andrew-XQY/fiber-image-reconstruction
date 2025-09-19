@@ -10,13 +10,18 @@ from datetime import datetime
 from config_utils import load_config
 from utils import *
 
+
 # ==================== 
 # Configuration
 # ==================== 
+# Future CLI parameters
+EVALUATE_ON_TEST = False  # whether to run evaluation on test set after training
+
+
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "ERN"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
+experiment_name = "CAE_syth"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT, CAE_syth
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
@@ -135,8 +140,20 @@ elif experiment_name == "ERN":
             decoder=config['model']['decoder'],
             final_activation=config['model']['final_activation'],  
         )
+elif experiment_name == "CAE_syth":
+    from models.CAE import Autoencoder2D
+    model = Autoencoder2D(
+        in_channels=int(config['model']["in_channels"]),
+        encoder=config['model']["encoder"],
+        decoder=config['model']["decoder"],
+        kernel_size=int(config['model']["kernel_size"]),
+        apply_batchnorm=config['model']["apply_batchnorm"],
+        apply_dropout=config['model']["apply_dropout"],
+        final_activation=str(config['model']["final_activation"]),
+    )
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 if experiment_name == "Pix2pix":
     G = G.to(device)
@@ -240,3 +257,11 @@ trainer.save_model(config["paths"]["output"])  # uses model.save_model(...) if a
 config_manager.save(output_dir=config["paths"]["output"], config_filename=config["name"])
 
 print("Training ALL complete.")
+
+if EVALUATE_ON_TEST:
+    print("Evaluating on TEST set...")
+    results = trainer.evaluate(test_dataset, metrics=[beam_param_metric])
+    print(results)
+    with open(f"{config['paths']['output']}/test_results.txt", "w") as f:
+        f.write(str(results))
+    print("Evaluation complete.")
