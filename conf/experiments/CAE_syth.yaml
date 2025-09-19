@@ -1,0 +1,76 @@
+# ====================
+# Conv AutoEncoder tuned on synthetic data
+# ====================
+
+seed: &seed 42                            # 42, 168, 500
+name: &config "CAE_syth.yaml"
+framework: "pytorch"
+
+paths:
+  output: &output ${paths.output_root}    # comes from shared defaults
+  dataset: ${paths.datasets.mmf}          # picked by machine profile
+
+model:
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  #256x256-1, 128x128-64, 64x64-128, 32x32-256, 16x16-512, 8x8-1024, 4x4-1024
+  encoder:           [64,       128,       256,       512,     1024,     1024]  
+  decoder:           [1024,     1024,      512,       256,     128,      64  ]
+  apply_batchnorm:   [0,        1,         1,         1,       1,        1   ]
+  apply_dropout:     [1,        1,         0,         0,       0,        0   ]
+  final_activation: sigmoid
+
+training:
+  epochs: &epochs 100                     # Number of full passes over training data
+  learning_rate: 1.0e-4                   # Initial learning rate for optimizer
+  batch_size: &batch 4                    # Number of samples per gradient update
+
+callbacks:
+  - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
+  - name: "torch_early_stopping"          # Factory key for early stopping
+    params:
+      monitor: "val_loss"                 # Metric to monitor
+      patience: 8                         # Epochs to wait before stopping
+  - name: "torch_image_reconstruction_callback"
+    params:
+      save_dir: ${paths.output}           # Directory to save results 
+
+data:
+  subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
+  training_set: "procIMGs/raw/"           # if used this then no need for the ratios
+  evaluation_set: "procIMGs_2/raw/"
+  train_val_split: 0.8                    # Train/validation split ratio
+  val_test_split: 0.5                     # Validation/test split ratio
+  input_shape: &inp [256, 256]            # Speckle image dimensions [H, W]
+  output_shape: &out [256, 256]           # Input pattern size [H, W]
+  transforms:
+    torch:
+      - name: "torch_load_image"          # Image loading transform
+      - name: "torch_to_tensor"           # Convert to tensor
+      - name: "torch_to_grayscale"        # Convert to grayscale
+      - name: "torch_remap_range"         # Normalize pixel values to [0,1]
+      - name: "torch_split_width"         # Split image into left/right halves
+        params:
+          swap: True                      # Swap left/right halves
+      - name: "multi_transform"           # take the left/right and apply transforms in sequence order
+        params:
+          transforms:
+            - name: "torch_resize"        # Resize image to match 
+              params:
+                size: *inp                # Resize dimensions [H, W]
+            - name: "torch_resize"        # Resize image to match 
+              params:
+                size: *out                # Resize dimensions [H, W]
+  dataset_ops:                            # Dataset level operations
+    - name: "torch_batch"                 # Batch images
+      params:
+        batch_size: *batch                # Number of images per batch
+        shuffle: True                     # Shuffle dataset
+        num_workers: 0                    # Number of worker threads for data loading
+        prefetch_factor: 2                # Number of batches to prefetch
+        seed: *seed                       # Random seed for reproducibility
+
+extra_files: ["models/CAE.py"]
