@@ -1,5 +1,8 @@
 # conf/machine/mac.yaml
 paths:
   datasets:
-    mmf: "/Users/andrewxu/Documents/DataHub/local_images/MMF"
+    mmf: "/Users/andrewxu/Documents/DataHub/datasets/"
     syns: "/Users/andrewxu/Documents/DataHub/datasets/2024-08-15/dataset/1"
+    test_qsl: "/Users/andrewxu/Documents/DataHub/datasets/"
+    clear_laser: "/Users/andrewxu/Documents/DataHub/datasets/2025-11-23-morning"
+    claer_yag: "/Users/andrewxu/Documents/DataHub/datasets/2025-11-23"

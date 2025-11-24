@@ -5,10 +5,13 @@
 seed: &seed 500 # 42, 168, 500
 name: &config "CAE.yaml"
 framework: "pytorch"
+file_extract: False
 
 paths:
   output: &output ${paths.output_root}    # comes from shared defaults
-  dataset: ${paths.datasets.mmf}          # picked by machine profile
+  dataset: ${paths.datasets.claer_yag}          # picked by machine profile
+  training_set: &training_set ${paths.datasets.clear_laser} 
+  test_set: &test_set ${paths.datasets.claer_yag} 
 
 model:
   in_channels: 1
@@ -38,6 +41,7 @@ callbacks:
       save_dir: ${paths.output}           # Directory to save results 
 
 data:
+  dataset: "2025-11-14.tar"
   subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
   training_set: "procIMGs/raw/"           # if used this then no need for the ratios
   evaluation_set: "procIMGs_2/raw/"
@@ -54,7 +58,16 @@ data:
       - name: "torch_split_width"         # Split image into left/right halves
         params:
           swap: True                      # Swap left/right halves
-      - name: "multi_transform"           # take the left/right and apply transforms in sequence order
+      - name: "multi_transform"           # Crop different regions for each half
+        params:
+          transforms:
+            - name: "torch_crop_area"
+              params:
+                points: [[748, 335], [1190, 777]]
+            - name: "torch_crop_area"
+              params:
+                points: [[360, 0], [1560, 1200]]
+      - name: "multi_transform"           # Resize each cropped region
         params:
           transforms:
             - name: "torch_resize"        # Resize image to match 

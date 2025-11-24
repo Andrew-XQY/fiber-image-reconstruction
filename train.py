@@ -1,11 +1,12 @@
 # pip install xflow-py
-from xflow import ConfigManager, FileProvider, PyTorchPipeline, show_model_info
+from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, show_model_info
 from xflow.data import build_transforms_from_config
 from xflow.utils import load_validated_config, save_image
 import xflow.extensions.physics
 
 import torch
 import os
+import tarfile
 from datetime import datetime  
 from config_utils import load_config
 from utils import *
@@ -17,11 +18,10 @@ from utils import *
 # Future CLI parameters
 EVALUATE_ON_TEST = False  # whether to run evaluation on test set after training
 
-
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "CAE_syth"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT, CAE_syth
+experiment_name = "CAE"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT, CAE_syth
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
@@ -33,11 +33,48 @@ os.makedirs(experiment_output_dir, exist_ok=True)
 # ==================== 
 # Prepare Dataset
 # ====================
-training_folder = os.path.join(config["paths"]["dataset"], config["data"]["training_set"])
-evaluation_folder = os.path.join(config["paths"]["dataset"], config["data"]["evaluation_set"])
-train_provider = FileProvider(training_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
-evaluation_provider = FileProvider(evaluation_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
-val_provider, test_provider = evaluation_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
+
+# directly read from two folders from the old MMF dataset
+# training_folder = os.path.join(config["paths"]["dataset"], config["data"]["training_set"])
+# evaluation_folder = os.path.join(config["paths"]["dataset"], config["data"]["evaluation_set"])
+# train_provider = FileProvider(training_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
+# evaluation_provider = FileProvider(evaluation_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
+# val_provider, test_provider = evaluation_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
+
+# New structure, read the database table first, get files from it.
+# Extract tar file if needed
+dataset_tar_file = os.path.join(config["paths"]["dataset"], config["data"]["dataset"])
+dataset_base_dir = os.path.dirname(dataset_tar_file)
+dataset_name = os.path.splitext(config["data"]["dataset"])[0]  # Remove .tar extension
+dataset_extracted_dir = os.path.join(dataset_base_dir, dataset_name)
+
+# Unzip tar file if not already extracted
+if not os.path.exists(dataset_extracted_dir):
+    print(f"Extracting {dataset_tar_file}...")
+    with tarfile.open(dataset_tar_file, 'r') as tar:
+        tar.extractall(path=dataset_base_dir)
+    print(f"Extracted to {dataset_extracted_dir}")
+else:
+    print(f"Dataset already extracted at {dataset_extracted_dir}")
+
+# Create SqlProvider to query the database
+db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
+query = """
+SELECT 
+    id, batch, purpose,  
+    image_path, comments
+FROM mmf_dataset_metadata 
+WHERE batch IN (2, 3)
+"""
+
+sql_provider = SqlProvider(
+    sources={"connection": db_path, "sql": query}
+)
+
+# Get the DataFrame and update image paths
+df = sql_provider()
+df['image_path'] = dataset_extracted_dir + '/' + df['image_path']
+print("dataset read successfully, in total {} entries.".format(len(df)))
 
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 def make_dataset(provider):
