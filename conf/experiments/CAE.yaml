@@ -59,15 +59,16 @@ data:
       - name: "torch_remap_range"               # Normalize pixel values to [0,1]
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
-          swap: True                            # Swap left/right halves
+          swap: True                            # Swap left/right halves, first is fiber output, second is ground truth !! (for training logic convenience)
       - name: "multi_transform"
         params:
           transforms:
+            - name: "identity"                  # Change back channel order after cropping
             - name: "check_centroid"            # Change channel order for cropping
               params:
                 rect: *crop_gt                  # From [C, H, W] to [H, W, C]
                 method: "first_moment"
-            - name: "identity"                  # Change back channel order after cropping
+                on_fail: "raise"
       - name: "multi_transform"                 # Crop different regions for each half
         params:
           transforms:
@@ -82,10 +83,10 @@ data:
           transforms:
             - name: "torch_resize"        
               params:
-                size: *inp                      # Resize dimensions [H, W]
+                size: *inp                      # Resize fiber image to dimensions [H, W]
             - name: "torch_resize"        
               params:
-                size: *out                      # Resize dimensions [H, W]
+                size: *out                      # Resize ground truth image to dimensions [H, W]
   dataset_ops:                                  # Dataset level operations
     - name: "torch_batch"                       # Batch images
       params:
