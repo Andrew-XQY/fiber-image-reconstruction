@@ -49,6 +49,8 @@ data:
   val_test_split: 0.5                     # Validation/test split ratio 50/50
   input_shape: &inp [256, 256]            # Speckle image dimensions [H, W]
   output_shape: &out [256, 256]           # Input pattern size [H, W]
+  crop_groud_truth: &crop_gt [[871, 554], [997, 680]]
+  crop_fiber_output: &crop_fo [[360, 0], [1560, 1200]]
   transforms:
     torch:
       - name: "torch_load_image"          # Load the image based on file path
@@ -58,15 +60,26 @@ data:
       - name: "torch_split_width"         # Split image into left/right halves on width
         params:
           swap: True                      # Swap left/right halves
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "check_centroid"       # Change channel order for cropping
+              params:
+                rect: *crop_gt           # From [C, H, W] to [H, W, C]
+                method: "first_moment"
+            - name: "check_centroid"       # Change back channel order after cropping
+              params:
+                rect: *crop_gt           # From [H, W, C] to [C, H, W]
+                method: "first_moment"
       - name: "multi_transform"           # Crop different regions for each half
         params:
           transforms:
             - name: "torch_crop_area"
               params:
-                points: [[360, 0], [1560, 1200]] 
+                points: *crop_fo
             - name: "torch_crop_area"
               params:
-                points: [[871, 554], [997, 680]] # [[748, 335], [1190, 777]] 
+                points: *crop_gt
       - name: "multi_transform"           # Resize each cropped region
         params:
           transforms:
