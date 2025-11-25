@@ -2,14 +2,14 @@
 # Conv AutoEncoder fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 42 # 42, 168, 500
+seed: &seed 42                                  # 42, 168, 500
 name: &config "CAE.yaml"
 framework: "pytorch"
 file_extract: False
 
 paths:
-  output: ${paths.output_root}    # comes from shared defaults
-  dataset: ${paths.datasets.clear_yag}          # picked by machine profile
+  output: ${paths.output_root}                  # Comes from shared defaults
+  dataset: ${paths.datasets.clear_yag}          # Picked by machine profile
   training_set: ${paths.datasets.clear_laser} 
   test_set: ${paths.datasets.clear_yag} 
 
@@ -24,54 +24,54 @@ model:
   final_activation: sigmoid
 
 training:
-  epochs: &epochs 100                     # Number of full passes over training data
-  learning_rate: 1.0e-4                   # Initial learning rate for optimizer
-  batch_size: &batch 4                   # Number of samples per gradient update
+  epochs: &epochs 100                           # Number of full passes over training data
+  learning_rate: 1.0e-4                         # Initial learning rate for optimizer
+  batch_size: &batch 4                          # Number of samples per gradient update
 
 callbacks:
   - name: "torch_batch_progress_bar"
     params:
       only_keys: ["train_loss", "val_loss"]
-  - name: "torch_early_stopping"          # Factory key for early stopping
+  - name: "torch_early_stopping"                # Factory key for early stopping
     params:
-      monitor: "val_loss"                 # Metric to monitor
-      patience: 20                        # Epochs to wait before stopping
+      monitor: "val_loss"                       # Metric to monitor
+      patience: 20                              # Epochs to wait before stopping
   - name: "torch_image_reconstruction_callback"
     params:
-      save_dir: ${paths.output}           # Directory to save results 
+      save_dir: ${paths.output}                 # Directory to save results 
 
 data:
-  dataset: "2025-11-14.tar"               # not used now, all in 'paths'
-  subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
-  training_set: "procIMGs/raw/"           # if used this then no need for the ratios
+  dataset: "2025-11-14.tar"                     # Not used now, all in 'paths'
+  subsample_fraction: 1                         # Total fraction of data to use, 1 for full set
+  training_set: "procIMGs/raw/"                 # If used this then no need for the ratios
   evaluation_set: "procIMGs_2/raw/"
-  train_val_split: 0.8                    # Train/validation split ratio 80/20
-  val_test_split: 0.5                     # Validation/test split ratio 50/50
-  input_shape: &inp [256, 256]            # Speckle image dimensions [H, W]
-  output_shape: &out [256, 256]           # Input pattern size [H, W]
+  train_val_split: 0.8                          # Train/validation split ratio 80/20
+  val_test_split: 0.5                           # Validation/test split ratio 50/50
+  input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
+  output_shape: &out [256, 256]                 # Input pattern size [H, W]
   crop_groud_truth: &crop_gt [[871, 554], [997, 680]]
   crop_fiber_output: &crop_fo [[360, 0], [1560, 1200]]
   transforms:
     torch:
-      - name: "torch_load_image"          # Load the image based on file path
-      - name: "torch_to_tensor"           # Convert to tensor
-      - name: "torch_to_grayscale"        # Convert to grayscale
-      - name: "torch_remap_range"         # Normalize pixel values to [0,1]
-      - name: "torch_split_width"         # Split image into left/right halves on width
+      - name: "torch_load_image"                # Load the image based on file path
+      - name: "torch_to_tensor"                 # Convert to tensor
+      - name: "torch_to_grayscale"              # Convert to grayscale
+      - name: "torch_remap_range"               # Normalize pixel values to [0,1]
+      - name: "torch_split_width"               # Split image into left/right halves on width
         params:
-          swap: True                      # Swap left/right halves
+          swap: True                            # Swap left/right halves
       - name: "multi_transform"
         params:
           transforms:
-            - name: "check_centroid"       # Change channel order for cropping
+            - name: "check_centroid"            # Change channel order for cropping
               params:
-                rect: *crop_gt           # From [C, H, W] to [H, W, C]
+                rect: *crop_gt                  # From [C, H, W] to [H, W, C]
                 method: "first_moment"
-            - name: "check_centroid"       # Change back channel order after cropping
+            - name: "check_centroid"            # Change back channel order after cropping
               params:
-                rect: *crop_gt           # From [H, W, C] to [C, H, W]
+                rect: *crop_gt                  # From [H, W, C] to [C, H, W]
                 method: "first_moment"
-      - name: "multi_transform"           # Crop different regions for each half
+      - name: "multi_transform"                 # Crop different regions for each half
         params:
           transforms:
             - name: "torch_crop_area"
@@ -80,22 +80,22 @@ data:
             - name: "torch_crop_area"
               params:
                 points: *crop_gt
-      - name: "multi_transform"           # Resize each cropped region
+      - name: "multi_transform"                 # Resize each cropped region
         params:
           transforms:
             - name: "torch_resize"        
               params:
-                size: *inp                # Resize dimensions [H, W]
+                size: *inp                      # Resize dimensions [H, W]
             - name: "torch_resize"        
               params:
-                size: *out                # Resize dimensions [H, W]
-  dataset_ops:                            # Dataset level operations
-    - name: "torch_batch"                 # Batch images
+                size: *out                      # Resize dimensions [H, W]
+  dataset_ops:                                  # Dataset level operations
+    - name: "torch_batch"                       # Batch images
       params:
-        batch_size: *batch                # Number of images per batch
-        shuffle: True                     # Shuffle dataset
-        num_workers: 0                    # Number of worker threads for data loading
-        prefetch_factor: 2                # Number of batches to prefetch
-        seed: *seed                       # Random seed for reproducibility
+        batch_size: *batch                      # Number of images per batch
+        shuffle: True                           # Shuffle dataset
+        num_workers: 0                          # Number of worker threads for data loading
+        prefetch_factor: 2                      # Number of batches to prefetch
+        seed: *seed                             # Random seed for reproducibility
 
 extra_files: ["models/CAE.py"]
