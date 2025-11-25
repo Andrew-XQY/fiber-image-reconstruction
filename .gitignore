@@ -12,7 +12,7 @@ venv/
 *.env
 
 # Jupyter notebooks
-*.ipynb
+# *.ipynb
 .ipynb_checkpoints/
 notebooks/*
 
