@@ -67,10 +67,7 @@ data:
               params:
                 rect: *crop_gt                  # From [C, H, W] to [H, W, C]
                 method: "first_moment"
-            - name: "check_centroid"            # Change back channel order after cropping
-              params:
-                rect: *crop_gt                  # From [H, W, C] to [C, H, W]
-                method: "first_moment"
+            - name: "identity"                  # Change back channel order after cropping
       - name: "multi_transform"                 # Crop different regions for each half
         params:
           transforms:
