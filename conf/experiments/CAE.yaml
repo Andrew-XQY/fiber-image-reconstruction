@@ -2,16 +2,16 @@
 # Conv AutoEncoder fiber image reconstruction configuration file
 # ====================
 
-seed: &seed 500 # 42, 168, 500
+seed: &seed 42 # 42, 168, 500
 name: &config "CAE.yaml"
 framework: "pytorch"
 file_extract: False
 
 paths:
   output: ${paths.output_root}    # comes from shared defaults
-  dataset: ${paths.datasets.claer_yag}          # picked by machine profile
+  dataset: ${paths.datasets.clear_yag}          # picked by machine profile
   training_set: ${paths.datasets.clear_laser} 
-  test_set: ${paths.datasets.claer_yag} 
+  test_set: ${paths.datasets.clear_yag} 
 
 model:
   in_channels: 1
@@ -41,21 +41,21 @@ callbacks:
       save_dir: ${paths.output}           # Directory to save results 
 
 data:
-  dataset: "2025-11-14.tar"
+  dataset: "2025-11-14.tar"               # not used now, all in 'paths'
   subsample_fraction: 1                   # Total fraction of data to use, 1 for full set
   training_set: "procIMGs/raw/"           # if used this then no need for the ratios
   evaluation_set: "procIMGs_2/raw/"
-  train_val_split: 0.8                    # Train/validation split ratio
-  val_test_split: 0.5                     # Validation/test split ratio
+  train_val_split: 0.8                    # Train/validation split ratio 80/20
+  val_test_split: 0.5                     # Validation/test split ratio 50/50
   input_shape: &inp [256, 256]            # Speckle image dimensions [H, W]
   output_shape: &out [256, 256]           # Input pattern size [H, W]
   transforms:
     torch:
-      - name: "torch_load_image"          # Image loading transform
+      - name: "torch_load_image"          # Load the image based on file path
       - name: "torch_to_tensor"           # Convert to tensor
       - name: "torch_to_grayscale"        # Convert to grayscale
       - name: "torch_remap_range"         # Normalize pixel values to [0,1]
-      - name: "torch_split_width"         # Split image into left/right halves
+      - name: "torch_split_width"         # Split image into left/right halves on width
         params:
           swap: True                      # Swap left/right halves
       - name: "multi_transform"           # Crop different regions for each half
@@ -66,14 +66,14 @@ data:
                 points: [[360, 0], [1560, 1200]] 
             - name: "torch_crop_area"
               params:
-                points: [[748, 335], [1190, 777]] 
+                points: [[871, 554], [997, 680]] # [[748, 335], [1190, 777]] 
       - name: "multi_transform"           # Resize each cropped region
         params:
           transforms:
-            - name: "torch_resize"        # Resize image to match 
+            - name: "torch_resize"        
               params:
                 size: *inp                # Resize dimensions [H, W]
-            - name: "torch_resize"        # Resize image to match 
+            - name: "torch_resize"        
               params:
                 size: *out                # Resize dimensions [H, W]
   dataset_ops:                            # Dataset level operations
