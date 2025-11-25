@@ -8,10 +8,10 @@ framework: "pytorch"
 file_extract: False
 
 paths:
-  output: &output ${paths.output_root}    # comes from shared defaults
+  output: ${paths.output_root}    # comes from shared defaults
   dataset: ${paths.datasets.claer_yag}          # picked by machine profile
-  training_set: &training_set ${paths.datasets.clear_laser} 
-  test_set: &test_set ${paths.datasets.claer_yag} 
+  training_set: ${paths.datasets.clear_laser} 
+  test_set: ${paths.datasets.claer_yag} 
 
 model:
   in_channels: 1
@@ -26,7 +26,7 @@ model:
 training:
   epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-4                   # Initial learning rate for optimizer
-  batch_size: &batch 32                   # Number of samples per gradient update
+  batch_size: &batch 4                   # Number of samples per gradient update
 
 callbacks:
   - name: "torch_batch_progress_bar"
@@ -63,10 +63,10 @@ data:
           transforms:
             - name: "torch_crop_area"
               params:
-                points: [[748, 335], [1190, 777]]
+                points: [[360, 0], [1560, 1200]] 
             - name: "torch_crop_area"
               params:
-                points: [[360, 0], [1560, 1200]]
+                points: [[748, 335], [1190, 777]] 
       - name: "multi_transform"           # Resize each cropped region
         params:
           transforms:
