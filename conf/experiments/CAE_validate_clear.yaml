@@ -45,8 +45,8 @@ data:
   val_test_split: 0.5                           # Validation/test split ratio 50/50
   input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
   output_shape: &out [256, 256]                 # Input pattern size [H, W]
-  crop_groud_truth: &crop_gt [[871, 554], [998, 680]]
-  crop_fiber_output: &crop_fo [[360, 0], [1560, 1200]]
+  crop_groud_truth: &crop_gt [[78, 181], [163, 98]] # [[871, 554], [998, 680]]
+  crop_fiber_output: &crop_fo [[0, 0], [255, 255]] # [[360, 0], [1560, 1200]]
   transforms:
     torch:
       - name: "torch_load_image"                # Load the image based on file path
