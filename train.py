@@ -21,7 +21,7 @@ EVALUATE_ON_TEST = False  # whether to run evaluation on test set after training
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "CAE"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT, CAE_syth
+experiment_name = "CAE"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
