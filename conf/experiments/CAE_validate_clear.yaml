@@ -12,6 +12,7 @@ paths:
   dataset: ${paths.datasets.clear_yag}          # Picked by machine profile
   training_set: ${paths.datasets.clear_laser} 
   test_set: ${paths.datasets.clear_yag} 
+  chromox_01: ${paths.datasets.clear_chromox_wednesday}
 
 model:
   in_channels: 1
@@ -55,7 +56,16 @@ data:
       - name: "torch_remap_range"               # Normalize pixel values to [0,1]
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
-          swap: True                            # Swap left/right halves, first is fiber output, second is ground truth !! (for training logic convenience)
+          swap: True     
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "identity"                  # Change back channel order after cropping
+            - name: "check_centroid"            # Change channel order for cropping
+              params:
+                rect: *crop_gt                  # From [C, H, W] to [H, W, C]
+                method: "beam_params"          # Centroid calculation method, beam_params; first_moment
+                on_fail: "raise"                # first is fiber output, second is ground truth !! (for training logic convenience)
       - name: "multi_transform"                 # Crop different regions for each half
         params:
           transforms:
