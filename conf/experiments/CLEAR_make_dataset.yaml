@@ -13,6 +13,9 @@ paths:
   training_set: ${paths.datasets.clear_laser} 
   test_set: ${paths.datasets.clear_yag} 
   chromox_01: ${paths.datasets.clear_chromox_wednesday}
+  chromox_02: ${paths.datasets.clear_chromox_friday}
+  chromox_03: ${paths.datasets.clear_chromox_saturday}
+  dmd_01: ${paths.datasets.dmd_01}
 
 model:
   in_channels: 1
@@ -46,14 +49,18 @@ data:
   val_test_split: 0.5                           # Validation/test split ratio 50/50
   input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
   output_shape: &out [256, 256]                 # Input pattern size [H, W]
-  crop_groud_truth: &crop_gt [[83, 178], [160, 101]] # [[871, 554], [998, 680]]   [[78, 181], [163, 98]]   [[863, 661], [997, 577]]
-  crop_fiber_output: &crop_fo [[0, 0], [255, 255]] # [[360, 0], [1560, 1200]]   [[0, 0], [255, 255]]
+  # Wednesday Chromox. 
+  # Friday/Saturday Chromox. [[74, 728], [1158, 488]]
+  # Green Laser
+  # YAG: 
+  crop_groud_truth: &crop_gt [[74, 728], [1158, 488]] 
+  # [[360, 0], [1560, 1200]]   [[0, 0], [255, 255]]
+  crop_fiber_output: &crop_fo [[360, 0], [1560, 1200]] 
   transforms:
     torch:
       - name: "torch_load_image"                # Load the image based on file path
       - name: "torch_to_tensor"                 # Convert to tensor
       - name: "torch_to_grayscale"              # Convert to grayscale
-      - name: "torch_remap_range"               # Normalize pixel values to [0,1]
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
           swap: True     
@@ -84,6 +91,14 @@ data:
             - name: "torch_resize"        
               params:
                 size: *out                      # Resize ground truth image to dimensions [H, W]
+      - name: "join_image"
+        params:
+          layout: [1, 2]                        # Join along channel dimension
+      - name: "save_image"                      # Save processed image 
+        params:
+          directory: ${paths.output}
+
+
   dataset_ops:                                  # Dataset level operations
     - name: "torch_batch"                       # Batch images
       params:
