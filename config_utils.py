@@ -34,9 +34,9 @@ def detect_machine() -> str:
 
 def load_config(
     exp_name: str,
+    machine: str,
     base_dir: str = "conf",
     experiment_name: str | None = None,
-    machine: str | None = None,
     prior_machine: bool = False,  
 ) -> dict:
     """
@@ -47,8 +47,6 @@ def load_config(
     if experiment_name:
         os.environ["EXPERIMENT_NAME"] = experiment_name
 
-    if machine is None:
-        machine = detect_machine()
     print(f"[config_utils] Using machine profile: {machine}")
 
     base = OmegaConf.load(Path(base_dir) / "paths.yaml")
