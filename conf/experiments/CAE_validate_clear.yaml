@@ -12,7 +12,9 @@ paths:
   dataset: ${paths.datasets.clear_yag}          # Picked by machine profile
   training_set: ${paths.datasets.clear_laser} 
   test_set: ${paths.datasets.clear_yag} 
-  chromox_01: ${paths.datasets.clear_chromox_wednesday}
+  chromox_2025-11-19: ${paths.datasets.clear_chromox_wednesday}
+  chromox_2025-11-21: ${paths.datasets.clear_chromox_friday}
+  chromox_2025-11-22-morning: ${paths.datasets.clear_chromox_saturday}
 
 model:
   in_channels: 1
