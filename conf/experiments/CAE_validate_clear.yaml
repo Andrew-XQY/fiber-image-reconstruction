@@ -3,7 +3,7 @@
 # ====================
 
 seed: &seed 42                                  # 42, 168, 500
-name: &config "CAE.yaml"
+name: &config "CAE_validate_clear.yaml"
 framework: "pytorch"
 file_extract: False
 
@@ -46,10 +46,6 @@ callbacks:
 data:
   train_val_split: 0.8                          # Train/validation split ratio 80/20
   val_test_split: 0.5                           # Validation/test split ratio 50/50
-  input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
-  output_shape: &out [256, 256]                 # Input pattern size [H, W]
-  crop_groud_truth: &crop_gt [[83, 178], [160, 101]] # [[871, 554], [998, 680]]   [[78, 181], [163, 98]]   [[863, 661], [997, 577]]
-  crop_fiber_output: &crop_fo [[0, 0], [255, 255]] # [[360, 0], [1560, 1200]]   [[0, 0], [255, 255]]
   transforms:
     torch:
       - name: "torch_load_image"                # Load the image based on file path
@@ -59,33 +55,6 @@ data:
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
           swap: True     
-      - name: "multi_transform"
-        params:
-          transforms:
-            - name: "identity"                  # Change back channel order after cropping
-            - name: "check_centroid"            # Change channel order for cropping
-              params:
-                rect: *crop_gt                  # From [C, H, W] to [H, W, C]
-                method: "first_moment"          # Centroid calculation method, beam_params; first_moment
-                on_fail: "raise"                # first is fiber output, second is ground truth !! (for training logic convenience)
-      - name: "multi_transform"                 # Crop different regions for each half
-        params:
-          transforms:
-            - name: "torch_crop_area"
-              params:
-                points: *crop_fo
-            - name: "torch_crop_area"
-              params:
-                points: *crop_gt
-      - name: "multi_transform"                 # Resize each cropped region
-        params:
-          transforms:
-            - name: "torch_resize"        
-              params:
-                size: *inp                      # Resize fiber image to dimensions [H, W]
-            - name: "torch_resize"        
-              params:
-                size: *out                      # Resize ground truth image to dimensions [H, W]
   dataset_ops:                                  # Dataset level operations
     - name: "torch_batch"                       # Batch images
       params:
