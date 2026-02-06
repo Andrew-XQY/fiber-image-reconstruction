@@ -21,7 +21,7 @@ EVALUATE_ON_TEST = False  # whether to run evaluation on test set after training
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
 
-experiment_name = "CAE"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
+experiment_name = "CAE_validate_clear"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
 folder_name = f"{experiment_name}-{timestamp}"  
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
 config = config_manager.get()
@@ -29,6 +29,7 @@ config_manager.add_files(config["extra_files"])
 
 experiment_output_dir = config["paths"]["output"]
 os.makedirs(experiment_output_dir, exist_ok=True)
+
 
 # ==================== 
 # Prepare Dataset
@@ -57,25 +58,39 @@ if not os.path.exists(dataset_extracted_dir):
 else:
     print(f"Dataset already extracted at {dataset_extracted_dir}")
 
-# Create SqlProvider to query the database
+# training set:
 db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
 query = """
 SELECT 
     id, batch, purpose,  
     image_path, comments
 FROM mmf_dataset_metadata 
-WHERE batch IN (2, 3)
+--WHERE batch IN (2, 3)
 """
-
-sql_provider = SqlProvider(
+train_provider = SqlProvider(
     sources={"connection": db_path, "sql": query}
 )
 
 # Get the DataFrame and update image paths
-df = sql_provider()
+df = train_provider()
 df['image_path'] = dataset_extracted_dir + '/' + df['image_path']
 print("dataset read successfully, in total {} entries.".format(len(df)))
 
+# validation + test set:
+db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
+query = """
+SELECT 
+    id, batch, purpose,  
+    image_path, comments
+FROM mmf_dataset_metadata 
+--WHERE batch IN (2, 3)
+"""
+evl_provider = SqlProvider(
+    sources={"connection": db_path, "sql": query}
+)
+val_provider, test_provider = evl_provider.split_by_column(column="purpose", val1="validation", val2="test")
+
+# data processing
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 def make_dataset(provider):
     return PyTorchPipeline(provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
@@ -105,7 +120,9 @@ else:
             save_image(left_parts[0], config["paths"]["output"] + "/input.png")
             save_image(right_parts[0], config["paths"]["output"] + "/output.png")
         break
+    
 
+# cut off, for logic clarity, the follow just need train_dataset, val_dataset, test_dataset.
 # ==================== 
 # Construct Model
 # ====================
