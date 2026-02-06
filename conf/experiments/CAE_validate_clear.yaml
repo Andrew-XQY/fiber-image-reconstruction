@@ -55,6 +55,15 @@ data:
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
           swap: True     
+      - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
+        params:
+          transforms:
+            - name: "torch_l2_normalize"   
+              params:
+                dims: [0, 1, 2]                  # Normalize across height and width dimensions     
+            - name: "torch_l2_normalize"        
+              params:
+                dims: [0, 1, 2]                  # Normalize across height and width dimensions
   dataset_ops:                                  # Dataset level operations
     - name: "torch_batch"                       # Batch images
       params:
