@@ -44,9 +44,22 @@ callbacks:
     params:
       save_dir: ${paths.output}                 # Directory to save results 
 
-
 simulation:
-  name: "clear"                             
+  canvas_size: [256, 256]                                                  
+  total_Guassian_num: 100  
+  minimum_pixel_threshold: 10.0
+  max_intensity: 70
+  fade_rate: 0.98
+  std_1: 0.02
+  std_2: 0.08
+  distribution: "other" 
+  process_functions:
+    - name: "remap_range"               # Normalize pixel values to [0,1]
+    - name: "resize"                   # Resize to match input dimensions
+      params:
+        size: [32, 32]
+        interpolation: "bilinear"
+
 
 data:
   total_train_samples: 1000                     
