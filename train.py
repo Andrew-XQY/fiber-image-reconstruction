@@ -58,46 +58,114 @@ if not os.path.exists(dataset_extracted_dir):
 else:
     print(f"Dataset already extracted at {dataset_extracted_dir}")
 
-# training set:
-db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
-query = """
-SELECT 
-    id, batch, purpose,  
-    image_path, comments
+
+
+
+
+
+# # training set:
+# db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
+# query = """
+# SELECT 
+#     id, batch, purpose,  
+#     image_path, comments
+# FROM mmf_dataset_metadata 
+# --WHERE batch IN (2, 3)
+# """
+# train_provider = SqlProvider(
+#     sources={"connection": db_path, "sql": query}
+# )
+
+# # Get the DataFrame and update image paths
+# df = train_provider()
+# df['image_path'] = dataset_extracted_dir + '/' + df['image_path']
+# print("dataset read successfully, in total {} entries.".format(len(df)))
+
+# # validation + test set:
+# db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
+# query = """
+# SELECT 
+#     id, batch, purpose,  
+#     image_path, comments
+# FROM mmf_dataset_metadata 
+# --WHERE batch IN (2, 3)
+# """
+# evl_provider = SqlProvider(
+#     sources={"connection": db_path, "sql": query}
+# )
+# val_provider, test_provider = evl_provider.split_by_column(column="purpose", val1="validation", val2="test")
+
+# # data processing
+# transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
+# def make_dataset(provider):
+#     return PyTorchPipeline(provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
+
+# train_dataset = make_dataset(train_provider)
+# val_dataset = make_dataset(val_provider)
+# test_dataset = make_dataset(test_provider)
+
+
+
+
+
+# training set (basis -> generative pipeline)
+query = """ 
+SELECT image_path
 FROM mmf_dataset_metadata 
---WHERE batch IN (2, 3)
+WHERE purpose = 'intensity_position' and batch IN (9)
+ORDER BY image_path
 """
 train_provider = SqlProvider(
-    sources={"connection": db_path, "sql": query}
+    sources={"connection": dirs["output_db_dir"], "sql": query}, output_config={'list': "image_path"}
 )
-
-# Get the DataFrame and update image paths
-df = train_provider()
-df['image_path'] = dataset_extracted_dir + '/' + df['image_path']
-print("dataset read successfully, in total {} entries.".format(len(df)))
-
-# validation + test set:
-db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
-query = """
-SELECT 
-    id, batch, purpose,  
-    image_path, comments
+# evaluation set (validation + test, using real beam pattern loaded on the DMD)
+query = """ 
+SELECT image_path
 FROM mmf_dataset_metadata 
---WHERE batch IN (2, 3)
+WHERE experiment_description = 'local real beam image for evaluation'
+AND is_saturated_fiber_output = 0
+--WHERE comments = 'test dmd'
 """
-evl_provider = SqlProvider(
-    sources={"connection": db_path, "sql": query}
+eval_provider = SqlProvider(
+    sources={"connection": dirs["output_db_dir"], "sql": query}, output_config={'list': "image_path"}
 )
-val_provider, test_provider = evl_provider.split_by_column(column="purpose", val1="validation", val2="test")
 
-# data processing
+# create data pipelines for ML training and evaluation
+config["data"]["transforms"]["torch"].insert(0, {
+    "name": "add_parent_dir",
+    "params": {
+        "parent_dir": dirs["output_dataset_dir"]
+    }
+})
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
-def make_dataset(provider):
-    return PyTorchPipeline(provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
 
-train_dataset = make_dataset(train_provider)
-val_dataset = make_dataset(val_provider)
-test_dataset = make_dataset(test_provider)
+
+canvas = pattern_gen.DynamicPatterns(256, 256)
+canvas.set_postprocess_fns([T.get("remap_range"), partial(T.get("resize"), size=(32,32), interpolation="bilinear")])
+canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(100)]
+canvas.thresholding(10)
+
+stream = canvas.pattern_stream(std_1=0.02, std_2=0.08, max_intensity=100, fade_rate=0.98, distribution='other') # (std_1=0.03, std_2=0.2, max_intensity=100, fade_rate=0.96, distribution='other'
+
+# ======== random combinator using index + SGM ========
+combinator = IndexCombinator(
+    pattern_provider=stream,
+    post_transforms= build_transforms_from_config(config["data"]["post_transforms"]["torch"]),
+)
+
+val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+train_pipeline = CachedBasisPipeline(train_provider, combinator=combinator, transforms=transforms, eager=True)
+val_pipeline = PyTorchPipeline(val_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+test_pipeline = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
+
+
+
+
+
+
+
+
+
 
 print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))
