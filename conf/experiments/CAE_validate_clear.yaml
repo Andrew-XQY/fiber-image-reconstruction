@@ -46,18 +46,17 @@ callbacks:
 
 simulation:
   canvas_size: [256, 256]                                                  
-  total_Guassian_num: 100  
-  minimum_pixel_threshold: 10.0
-  max_intensity: 70
-  fade_rate: 0.98
-  std_1: 0.02
-  std_2: 0.08
+  total_Guassian_num: 100                       # SGM total number of Guassian components
+  minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
+  fade_rate: 0.98                               # Controls how many active Guassian compoents in a probablistic way
+  std_1: 0.02                                   # Guassian std lower bound
+  std_2: 0.08                                   # Guassian std upper bound
   distribution: "other" 
-  process_functions:
-    - name: "remap_range"               # Normalize pixel values to [0,1]
-    - name: "resize"                   # Resize to match input dimensions
+  process_functions:                           # before the 
+    - name: "remap_range"                      # Normalize pixel values to [0,1]
+    - name: "resize"                           # Resize to match input dimensions
       params:
-        size: [32, 32]
+        size: [32, 32]                         # convient for next step (orthognal basis) to decompose the image.
         interpolation: "bilinear"
 
 
