@@ -46,24 +46,69 @@ callbacks:
 data:
   train_val_split: 0.8                          # Train/validation split ratio 80/20
   val_test_split: 0.5                           # Validation/test split ratio 50/50
+  crop_gt: &crop_gt [[742, 341], [1202, 801]]
+  crop_fo: &crop_fo [[360, 0], [1560, 1200]]
+  input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
+  output_shape: &out [256, 256]                 # Input pattern size [H
   transforms:
     torch:
       - name: "torch_load_image"                # Load the image based on file path
       - name: "torch_to_tensor"                 # Convert to tensor
       # - name: "torch_to_grayscale"              # Convert to grayscale
-      # - name: "torch_remap_range"               # Normalize pixel values to [0,1]
+      - name: "torch_remap_range"               # Normalize pixel values to [0,1]
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
-          swap: True     
+          swap: True       
+      - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
+        params:
+          transforms:
+            - name: "identity"                  # Fiber output   
+            # - name: "torch_threshold"          
+            #   params:
+            #     threshold: 5.0
+            #     threshold_value: 0.0
+            #     threshold_mode: "below"       
+            - name: "torch_threshold"           # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
+              params:
+                threshold: 0.098
+                threshold_value: 0.0
+                threshold_mode: "below"        
+
+  post_transforms:
+    torch:
       # - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
       #   params:
       #     transforms:
-      #       - name: "torch_l2_normalize"   
+      #       - name: "torch_crop_area"        
       #         params:
-      #           dims: [0, 1, 2]                  # Normalize across height and width dimensions     
-      #       - name: "torch_l2_normalize"        
+      #           points: *crop_fo
+      #       - name: "torch_crop_area"          # Ground truth
       #         params:
-      #           dims: [0, 1, 2]                  # Normalize across height and width dimensions
+      #           points: *crop_gt
+      # - name: "multi_transform"                 # Resize each cropped region
+      #   params:
+      #     transforms:
+      #       - name: "torch_resize"    
+      #         params:
+      #           size: *inp
+      #           interpolation: "bilinear"
+      #       - name: "torch_resize"
+      #         params:
+      #           size: *out
+      #           interpolation: "bilinear"
+      - name: "multi_transform"                
+        params:
+          transforms:
+            - name: "torch_clip_range"   
+              params:
+                clip_min: 0
+                clip_max: 1
+            - name: "torch_clip_range"        
+              params:
+                clip_min: 0
+                clip_max: 1
+
+
   dataset_ops:                                  # Dataset level operations
     - name: "torch_batch"                       # Batch images
       params:
