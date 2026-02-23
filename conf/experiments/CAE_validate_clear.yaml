@@ -44,7 +44,12 @@ callbacks:
     params:
       save_dir: ${paths.output}                 # Directory to save results 
 
+
+simulation:
+  name: "clear"                             
+
 data:
+  total_train_samples: 1000                     
   train_val_split: 0.8                          # Train/validation split ratio 80/20
   val_test_split: 0.5                           # Validation/test split ratio 50/50
   crop_gt: &crop_gt [[742, 341], [1202, 801]]
