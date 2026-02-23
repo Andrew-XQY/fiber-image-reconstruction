@@ -60,7 +60,7 @@ else:
 
 
 
-
+# dataset with batch folders (raw dataset structure)
 
 # # training set:
 # db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
@@ -144,7 +144,6 @@ canvas = pattern_gen.DynamicPatterns(256, 256)
 canvas.set_postprocess_fns([T.get("remap_range"), partial(T.get("resize"), size=(32,32), interpolation="bilinear")])
 canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(100)]
 canvas.thresholding(10)
-
 stream = canvas.pattern_stream(std_1=0.02, std_2=0.08, max_intensity=100, fade_rate=0.98, distribution='other') # (std_1=0.03, std_2=0.2, max_intensity=100, fade_rate=0.96, distribution='other'
 
 # ======== random combinator using index + SGM ========
@@ -154,7 +153,12 @@ combinator = IndexCombinator(
 )
 
 val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-train_dataset = CachedBasisPipeline(train_provider, combinator=combinator, transforms=transforms, eager=True)
+train_dataset = CachedBasisPipeline(train_provider, 
+                                    combinator=combinator, 
+                                    transforms=transforms, 
+                                    num_samples=100, 
+                                    seed=config["seed"],
+                                    eager=True).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
 val_dataset = PyTorchPipeline(val_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
 test_dataset = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
 
@@ -168,6 +172,7 @@ model_name = config['model']['name']
 # save a sample from dataset for debugging
 if model_name in REGRESSION:
     for left_parts, params, right_parts in test_dataset:
+        print("Sample types: ", type(left_parts[0]))
         print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
         save_image(left_parts[0], config["paths"]["output"] + "/input.png")
         save_image(right_parts[0], config["paths"]["output"] + "/output.png")
@@ -175,6 +180,7 @@ if model_name in REGRESSION:
 else:
     for left_parts, right_parts in test_dataset:
         # batch will be a tuple: (right_halves, left_halves) due to split_width
+        print("Sample types: ", type(left_parts[0]))
         print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
         if model_name in SAMPLE_FLATTENED:
             save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/input.png")
