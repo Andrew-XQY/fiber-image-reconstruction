@@ -11,6 +11,7 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 model:
+  name: "SwinT"                         # Factory key for model architecture
   img_size: 256                           # Input image size (assumed square)       
   window_size: 8                          # 7 for 224, 8 for 256
   in_chans: 1

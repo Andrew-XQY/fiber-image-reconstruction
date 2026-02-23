@@ -9,14 +9,15 @@ file_extract: False
 
 paths:
   output: ${paths.output_root}                  # Comes from shared defaults
-  dataset: ${paths.datasets.clear_yag}          # Picked by machine profile
-  training_set: ${paths.datasets.clear_laser} 
-  test_set: ${paths.datasets.clear_yag} 
-  chromox_2025-11-19: ${paths.datasets.clear_chromox_wednesday}
-  chromox_2025-11-21: ${paths.datasets.clear_chromox_friday}
-  chromox_2025-11-22-morning: ${paths.datasets.clear_chromox_saturday}
+  clear_yag: ${paths.datasets.clear_yag}          # Picked by machine profile
+  clear_laser: ${paths.datasets.clear_laser} 
+  clear_chromox_wednesday: ${paths.datasets.clear_chromox_wednesday}
+  clear_chromox_friday: ${paths.datasets.clear_chromox_friday}
+  clear_chromox_saturday: ${paths.datasets.clear_chromox_saturday}
+  processed_pure_dmd: ${paths.datasets.processed_pure_dmd}
 
 model:
+  name: "CAE"                             # Factory key for model architecture
   in_channels: 1
   out_channels: 1
   kernel_size: 4

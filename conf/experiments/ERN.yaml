@@ -11,6 +11,7 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 model:
+  name: "ERN"                            # Factory key for model architecture
   in_channels: 1
   kernel_size: 4
   encoder: [64, 128, 128, 256, 512, 512]

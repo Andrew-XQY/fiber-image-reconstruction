@@ -10,6 +10,9 @@ paths:
   output:  ${paths.output_root}           # comes from shared defaults
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
+model:
+  name: "TM"                             # Factory key for Transmission Matrix architecture 
+
 training:
   epochs: &epochs 100                     # Number of full passes over training data
   learning_rate: 1.0e-5                   # Initial learning rate for optimizer

@@ -11,6 +11,7 @@ paths:
   dataset: ${paths.datasets.mmf}          # picked by machine profile
 
 model:
+  name: "Pix2pix"                       # Factory key for model architecture
   channels: 1
   lambda_l1: 100.0
 

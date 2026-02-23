@@ -1,14 +1,17 @@
 # pip install xflow-py
-from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, show_model_info
+from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, show_model_info, TransformRegistry as T
 from xflow.data import build_transforms_from_config
 from xflow.utils import load_validated_config, save_image
 import xflow.extensions.physics
+from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator
+from xflow.extensions.physics import pattern_gen
 
 import torch
 import os
 import tarfile
 from datetime import datetime  
-from config_utils import load_config
+from functools import partial
+from config_utils import load_config, detect_machine
 from utils import *
 
 
@@ -20,10 +23,13 @@ EVALUATE_ON_TEST = False  # whether to run evaluation on test set after training
 
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
-
 experiment_name = "CAE_validate_clear"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
+machine = detect_machine() 
+
 folder_name = f"{experiment_name}-{timestamp}"  
-config_manager = ConfigManager(load_config(f"{experiment_name}.yaml", experiment_name=folder_name))
+config_manager = ConfigManager(load_config(f"{experiment_name}.yaml",
+                                           experiment_name=folder_name,
+                                           machine=machine))
 config = config_manager.get()
 config_manager.add_files(config["extra_files"])
 
@@ -35,18 +41,12 @@ os.makedirs(experiment_output_dir, exist_ok=True)
 # Prepare Dataset
 # ====================
 
-# directly read from two folders from the old MMF dataset
-# training_folder = os.path.join(config["paths"]["dataset"], config["data"]["training_set"])
-# evaluation_folder = os.path.join(config["paths"]["dataset"], config["data"]["evaluation_set"])
-# train_provider = FileProvider(training_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
-# evaluation_provider = FileProvider(evaluation_folder).subsample(fraction=config["data"]["subsample_fraction"], seed=config["seed"]) 
-# val_provider, test_provider = evaluation_provider.split(ratio=config["data"]["val_test_split"], seed=config["seed"])
-
 # New structure, read the database table first, get files from it.
 # Extract tar file if needed
-dataset_tar_file = os.path.join(config["paths"]["dataset"], config["data"]["dataset"])
+
+dataset_tar_file = config["paths"]["processed_pure_dmd"]
 dataset_base_dir = os.path.dirname(dataset_tar_file)
-dataset_name = os.path.splitext(config["data"]["dataset"])[0]  # Remove .tar extension
+dataset_name = os.path.splitext(os.path.basename(dataset_tar_file))[0]  # Remove .tar extension
 dataset_extracted_dir = os.path.join(dataset_base_dir, dataset_name)
 
 # Unzip tar file if not already extracted
@@ -57,7 +57,6 @@ if not os.path.exists(dataset_extracted_dir):
     print(f"Extracted to {dataset_extracted_dir}")
 else:
     print(f"Dataset already extracted at {dataset_extracted_dir}")
-
 
 
 
@@ -109,6 +108,7 @@ else:
 
 
 # training set (basis -> generative pipeline)
+db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
 query = """ 
 SELECT image_path
 FROM mmf_dataset_metadata 
@@ -116,7 +116,7 @@ WHERE purpose = 'intensity_position' and batch IN (9)
 ORDER BY image_path
 """
 train_provider = SqlProvider(
-    sources={"connection": dirs["output_db_dir"], "sql": query}, output_config={'list': "image_path"}
+    sources={"connection": db_path, "sql": query}, output_config={'list': "image_path"}
 )
 # evaluation set (validation + test, using real beam pattern loaded on the DMD)
 query = """ 
@@ -127,14 +127,14 @@ AND is_saturated_fiber_output = 0
 --WHERE comments = 'test dmd'
 """
 eval_provider = SqlProvider(
-    sources={"connection": dirs["output_db_dir"], "sql": query}, output_config={'list': "image_path"}
+    sources={"connection": db_path, "sql": query}, output_config={'list': "image_path"}
 )
 
 # create data pipelines for ML training and evaluation
 config["data"]["transforms"]["torch"].insert(0, {
     "name": "add_parent_dir",
     "params": {
-        "parent_dir": dirs["output_dataset_dir"]
+        "parent_dir": dataset_extracted_dir
     }
 })
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
@@ -154,15 +154,9 @@ combinator = IndexCombinator(
 )
 
 val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-train_pipeline = CachedBasisPipeline(train_provider, combinator=combinator, transforms=transforms, eager=True)
-val_pipeline = PyTorchPipeline(val_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
-test_pipeline = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
-
-
-
-
-
-
+train_dataset = CachedBasisPipeline(train_provider, combinator=combinator, transforms=transforms, eager=True)
+val_dataset = PyTorchPipeline(val_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+test_dataset = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
 
 
 
@@ -170,8 +164,9 @@ test_pipeline = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_datase
 print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))
 
+model_name = config['model']['name']
 # save a sample from dataset for debugging
-if experiment_name in REGRESSION:
+if model_name in REGRESSION:
     for left_parts, params, right_parts in test_dataset:
         print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
         save_image(left_parts[0], config["paths"]["output"] + "/input.png")
@@ -181,7 +176,7 @@ else:
     for left_parts, right_parts in test_dataset:
         # batch will be a tuple: (right_halves, left_halves) due to split_width
         print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
-        if experiment_name in SAMPLE_FLATTENED:
+        if model_name in SAMPLE_FLATTENED:
             save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/input.png")
             save_image(right_parts[0].reshape(config['data']['output_shape']), config["paths"]["output"] + "/output.png")
         else:
@@ -194,7 +189,7 @@ else:
 # ==================== 
 # Construct Model
 # ====================
-if experiment_name == "CAE":
+if model_name == "CAE":
     from models.CAE import Autoencoder2D
     model = Autoencoder2D(
         in_channels=int(config['model']["in_channels"]),
@@ -205,7 +200,7 @@ if experiment_name == "CAE":
         apply_dropout=config['model']["apply_dropout"],
         final_activation=str(config['model']["final_activation"]),
     )
-elif experiment_name == "TM":
+elif model_name == "TM":
     from models.TM import TransmissionMatrix
     model = TransmissionMatrix(
         input_height = config["data"]["input_shape"][0],
@@ -214,7 +209,7 @@ elif experiment_name == "TM":
         output_width = config["data"]["output_shape"][1],
         initialization = "xavier",
     )
-elif experiment_name == "SHL_DNN":
+elif model_name == "SHL_DNN":
     from models.SHL_DNN import SHLNeuralNetwork
     model = SHLNeuralNetwork(
         input_size=config['data']['input_shape'][0] * config['data']['input_shape'][1],
@@ -222,7 +217,7 @@ elif experiment_name == "SHL_DNN":
         output_size=config['data']['output_shape'][0] * config['data']['output_shape'][1],
         dropout_rate=config['model']['dropout_rate'],
     )
-elif experiment_name == "U_Net":
+elif model_name == "U_Net":
     from models.U_Net import UNet
     model = UNet(
         in_channels=config["model"]["in_channels"],
@@ -234,7 +229,7 @@ elif experiment_name == "U_Net":
         out_channels=config["model"]["out_channels"],
         final_activation=config["model"]["final_activation"],
     )
-elif experiment_name == "SwinT":
+elif model_name == "SwinT":
     from models.SwinT import SwinUNet, ReconLoss
     model = SwinUNet(
         img_size=config['model']['img_size'],
@@ -246,14 +241,14 @@ elif experiment_name == "SwinT":
         window_size=config['model']['window_size'],
         patch_size=config['model']['patch_size'],
     )
-elif experiment_name == "Pix2pix":
+elif model_name == "Pix2pix":
     from models.Pix2pix import Generator, Discriminator, Pix2PixLosses
     G = Generator(channels=config["model"]["channels"])
     D = Discriminator(channels=config["model"]["channels"])
     losses = Pix2PixLosses(lambda_l1=config["model"]["lambda_l1"])
     opt_g = torch.optim.Adam(G.parameters(), lr=config["training"]["learning_rate"], betas=config["training"]["betas"])
     opt_d = torch.optim.Adam(D.parameters(), lr=config["training"]["learning_rate"], betas=config["training"]["betas"])
-elif experiment_name == "ERN":
+elif model_name == "ERN":
     from models.ERN import EncoderRegressor
     model = EncoderRegressor(
             in_channels=config['model']['in_channels'],
@@ -262,7 +257,7 @@ elif experiment_name == "ERN":
             decoder=config['model']['decoder'],
             final_activation=config['model']['final_activation'],  
         )
-elif experiment_name == "CAE_syth":
+elif model_name == "CAE_syth":
     from models.CAE import Autoencoder2D
     model = Autoencoder2D(
         in_channels=int(config['model']["in_channels"]),
@@ -277,12 +272,12 @@ elif experiment_name == "CAE_syth":
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-if experiment_name == "Pix2pix":
+if model_name == "Pix2pix":
     G = G.to(device)
     D = D.to(device)
     show_model_info(G)
     show_model_info(D)
-elif experiment_name == "SwinT":
+elif model_name == "SwinT":
     from torch.optim.lr_scheduler import LambdaLR
     total_steps = config['training']['epochs'] * len(train_dataset)
     warmup_steps = int(config['training']['warmup_ratio'] * total_steps)
@@ -330,17 +325,17 @@ callbacks = build_callbacks_from_config(
 callbacks[-1].set_dataset(test_dataset)
 
 # Extract beam parameters closure (return as dict)
-if experiment_name in SAMPLE_FLATTENED:
+if model_name in SAMPLE_FLATTENED:
     extract_beam_parameters_dict = partial(extract_beam_parameters_flat, as_array=False)
     beam_param_metric = make_beam_param_metric(extract_beam_parameters_dict)
-elif experiment_name in REGRESSION:   # e.g., "ERN"
+elif model_name in REGRESSION:   # e.g., "ERN"
     beam_param_metric = make_param_metric()
 else:
     extract_beam_parameters_dict = partial(extract_beam_parameters, as_array=False)
     beam_param_metric = make_beam_param_metric(extract_beam_parameters_dict)
 
 # 3) run training
-if experiment_name in GAN:
+if model_name in GAN:
     trainer = TorchGANTrainer(
         generator=G,
         discriminator=D,
@@ -363,7 +358,7 @@ else:
         output_dir=config["paths"]["output"],
         data_pipeline=train_dataset,
         val_metrics=[beam_param_metric],
-        scheduler= scheduler if experiment_name == "SwinT" else None, 
+        scheduler= scheduler if model_name == "SwinT" else None, 
         scheduler_step_per_batch=True,
     )
 
