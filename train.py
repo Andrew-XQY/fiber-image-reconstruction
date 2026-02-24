@@ -109,27 +109,13 @@ else:
 
 # training set (basis -> generative pipeline)
 db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
-query = """ 
-SELECT image_path
-FROM mmf_dataset_metadata 
-WHERE purpose = 'intensity_position' and batch IN (9)
-ORDER BY image_path
-"""
-train_provider = SqlProvider(
-    sources={"connection": db_path, "sql": query}, output_config={'list': "image_path"}
-)
-# evaluation set (validation + test, using real beam pattern loaded on the DMD)
-query = """ 
-SELECT image_path
-FROM mmf_dataset_metadata 
-WHERE experiment_description = 'local real beam image for evaluation'
-AND is_saturated_fiber_output = 0
---WHERE comments = 'test dmd'
-"""
-eval_provider = SqlProvider(
-    sources={"connection": db_path, "sql": query}, output_config={'list': "image_path"}
-)
 
+train_provider = SqlProvider(
+    sources={"connection": db_path, "sql": config["sql"]["train"]}, output_config={'list': "image_path"}
+)
+eval_provider = SqlProvider(
+    sources={"connection": db_path, "sql": config["sql"]["eval"]}, output_config={'list': "image_path"}
+)
 # create data pipelines for ML training and evaluation
 config["data"]["transforms"]["torch"].insert(0, {
     "name": "add_parent_dir",
@@ -138,7 +124,6 @@ config["data"]["transforms"]["torch"].insert(0, {
     }
 })
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
-
 
 canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
 canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
