@@ -6,6 +6,10 @@ seed: &seed 42                                  # 42, 168, 500
 name: &config "CAE_validate_clear.yaml"
 framework: "pytorch"
 file_extract: False
+note: |
+  Saturday night DMD orth basis data used on SGM as training set, 
+  validate with previous CLEAR beam image on the same DMD before and 
+  after the training set data collection time
 
 paths:
   output: ${paths.output_root}                  # Comes from shared defaults
@@ -59,6 +63,18 @@ simulation:
         size: [32, 32]                         # convient for next step (orthognal basis) to decompose the image.
         interpolation: "bilinear"
 
+sql:
+  train: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE purpose = 'intensity_position' AND batch IN (9)
+    ORDER BY image_path
+
+  eval: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE experiment_description = 'local real beam image for evaluation'
+      AND is_saturated_fiber_output = 0
 
 data:
   total_train_samples: 1000                     
@@ -125,7 +141,6 @@ data:
               params:
                 clip_min: 0
                 clip_max: 1
-
 
   dataset_ops:                                  # Dataset level operations
     - name: "torch_batch"                       # Batch images
