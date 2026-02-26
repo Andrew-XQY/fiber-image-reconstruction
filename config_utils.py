@@ -62,5 +62,5 @@ def load_config(
         # experiment wins (original)
         cfg = OmegaConf.merge(base, mach, exp)
 
-    return OmegaConf.to_container(cfg, resolve=True)
+    return OmegaConf.to_container(cfg, resolve=resolve)
 
