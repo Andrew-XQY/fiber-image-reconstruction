@@ -1,5 +1,5 @@
 # pip install xflow-py
-from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, show_model_info, shape_trace, TransformRegistry as T
+from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T
 from xflow.data import build_transforms_from_config
 from xflow.utils import load_validated_config, save_image
 import xflow.extensions.physics
@@ -104,9 +104,6 @@ else:
 # test_dataset = make_dataset(test_provider)
 
 
-
-
-
 # training set (basis -> generative pipeline)
 db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
 
@@ -168,7 +165,7 @@ if model_name in REGRESSION:
         save_image(right_parts[0], config["paths"]["output"] + "/output.png")
         break
 else:
-    for left_parts, right_parts in train_dataset:
+    for left_parts, right_parts in test_dataset:
         # batch will be a tuple: (right_halves, left_halves) due to split_width
         print("Sample types: ", type(left_parts[0]))
         print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
@@ -271,8 +268,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if model_name == "Pix2pix":
     G = G.to(device)
     D = D.to(device)
-    show_model_info(G)
-    show_model_info(D)
+    # show_model_info(G)
+    # show_model_info(D)
 elif model_name == "SwinT":
     from torch.optim.lr_scheduler import LambdaLR
     total_steps = config['training']['epochs'] * len(train_dataset)
@@ -294,18 +291,14 @@ elif model_name == "SwinT":
         eps=config['training']['eps'], weight_decay=config['training']['weight_decay']
     )
     scheduler = LambdaLR(optimizer, lr_lambda)
-    show_model_info(model)
 else:
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
-    show_model_info(model)
 
-# Print model shape information with a dummy forward pass (for debugging)
-with torch.no_grad():
-    with shape_trace(model, enabled=True, leaf_only=True):
-        y = model(torch.randn(1, 1, 256, 256))
-print("Final output shape:", tuple(y.shape))
-
+report = build_model_report(model, lambda: model(torch.randn(1, 1, 256, 256)))
+with open(f"{experiment_output_dir}/model_report.txt", "w", encoding="utf-8") as f:
+    f.write(report)
+config_manager.save(output_dir=config["paths"]["output"], config_filename=config["name"])
 
 # ==================== 
 # Training
@@ -374,14 +367,4 @@ history = trainer.fit(
 # 4) save results
 trainer.save_history(f"{config['paths']['output']}/history.json")
 trainer.save_model(config["paths"]["output"])  # uses model.save_model(...) if available
-config_manager.save(output_dir=config["paths"]["output"], config_filename=config["name"])
-
 print("Training ALL complete.")
-
-if EVALUATE_ON_TEST:
-    print("Evaluating on TEST set...")
-    results = trainer.evaluate(test_dataset, metrics=[beam_param_metric])
-    print(results)
-    with open(f"{config['paths']['output']}/test_results.txt", "w") as f:
-        f.write(str(results))
-    print("Evaluation complete.")
