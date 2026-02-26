@@ -1,5 +1,5 @@
 # pip install xflow-py
-from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, show_model_info, TransformRegistry as T
+from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, show_model_info, shape_trace, TransformRegistry as T
 from xflow.data import build_transforms_from_config
 from xflow.utils import load_validated_config, save_image
 import xflow.extensions.physics
@@ -125,6 +125,9 @@ config["data"]["transforms"]["torch"].insert(0, {
 })
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 
+
+
+    
 canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
 canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
 canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
@@ -296,7 +299,13 @@ else:
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
     show_model_info(model)
-    
+
+# Print model shape information with a dummy forward pass (for debugging)
+with torch.no_grad():
+    with shape_trace(model, enabled=True, leaf_only=True):
+        y = model(torch.randn(1, 1, 256, 256))
+print("Final output shape:", tuple(y.shape))
+
 
 # ==================== 
 # Training
@@ -316,6 +325,7 @@ callbacks = build_callbacks_from_config(
     framework=config["framework"],  
 ) # keep dataset closure for last callback, sequence hardcoded
 callbacks[-1].set_dataset(test_dataset)
+callbacks[-1].set_training_dataset(train_dataset)
 
 # Extract beam parameters closure (return as dict)
 if model_name in SAMPLE_FLATTENED:
