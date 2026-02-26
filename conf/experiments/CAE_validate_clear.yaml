@@ -25,7 +25,7 @@ model:
   in_channels: 1
   out_channels: 1
   kernel_size: 4
-  encoder:          [64,  128, 128, 256, 512, 512]
+  encoder:          [64,  128, 128, 256, 512, 512]      # 256 -> 128 -> 64 -> 32 -> 16 -> 8
   decoder:          [512, 512, 256, 128, 128, 64 ]
   apply_batchnorm:  [0,   1,   1,   1,   1,   1  ]
   apply_dropout:    [1,   1,   0,   0,   0,   0  ]
@@ -47,10 +47,13 @@ callbacks:
   - name: "torch_image_reconstruction_callback"
     params:
       save_dir: ${paths.output}                 # Directory to save results 
+      include_training_images: True           # Whether to include training images in the output
+
 
 simulation:
   canvas_size: [256, 256]                                                  
   total_Guassian_num: 100                       # SGM total number of Guassian components
+  max_intensity: 100                                  # Max intensity for each Guassian component
   minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
   fade_rate: 0.98                               # Controls how many active Guassian compoents in a probablistic way
   std_1: 0.02                                   # Guassian std lower bound
@@ -108,9 +111,9 @@ data:
                 threshold_value: 0.0
                 threshold_mode: "below"        
 
-  post_transforms:
+  post_transforms:                               # this is for the output from data augmentation using basis
     torch:
-      # - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
+      # - name: "multi_transform"                # normalized the orthogonal basis (but exclude on the val/test set)
       #   params:
       #     transforms:
       #       - name: "torch_crop_area"        
