@@ -56,7 +56,7 @@ simulation:
   max_intensity: 100                                  # Max intensity for each Guassian component
   minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
   fade_rate: 0.98                               # Controls how many active Guassian compoents in a probablistic way
-  std_1: 0.02                                   # Guassian std lower bound
+  std_1: 0.015                                   # Guassian std lower bound
   std_2: 0.08                                   # Guassian std upper bound
   distribution: "other" 
   process_functions:                           # before the 
@@ -80,7 +80,7 @@ sql:
       AND is_saturated_fiber_output = 0
 
 data:
-  total_train_samples: 1000                     
+  total_train_samples: 5000                     
   train_val_split: 0.8                          # Train/validation split ratio 80/20
   val_test_split: 0.5                           # Validation/test split ratio 50/50
   crop_gt: &crop_gt [[742, 341], [1202, 801]]
