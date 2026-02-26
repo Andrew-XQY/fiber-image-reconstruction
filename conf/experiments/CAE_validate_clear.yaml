@@ -80,7 +80,7 @@ sql:
       AND is_saturated_fiber_output = 0
 
 data:
-  total_train_samples: 5000                     
+  total_train_samples: 4000                     
   train_val_split: 0.8                          # Train/validation split ratio 80/20
   val_test_split: 0.5                           # Validation/test split ratio 50/50
   crop_gt: &crop_gt [[742, 341], [1202, 801]]

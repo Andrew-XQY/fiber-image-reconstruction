@@ -46,6 +46,10 @@ echo "Using container image: $IMG"  # for debug check
 # Match SBATCH log path (relative to submit dir)
 mkdir -p results/slurm
 
+# Update the core repo/code before running, make sure everything synched
+git -C "$CODE/XFlow" pull
+git -C "$CODE/examples/fiber-image-reconstruction-comparison" pull
+
 srun apptainer exec --nv --writable-tmpfs \
   -B "$DATA:/workspace/dataset:ro" \
   -B "$OUT:/workspace/results" \
