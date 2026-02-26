@@ -39,6 +39,7 @@ def load_config(
     base_dir: str = "conf",
     experiment_name: str | None = None,
     prior_machine: bool = False,  
+    resolve: bool = True
 ) -> dict:
     """
     If prior_machine=True, machine config overwrites experiment config.
