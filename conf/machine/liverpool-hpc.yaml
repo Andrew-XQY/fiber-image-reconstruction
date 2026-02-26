@@ -2,5 +2,6 @@
 paths:
   datasets:
     mmf: "/workspace/dataset/MMF"
+    processed_pure_dmd: "/workspace/dataset/CLEAR25_DMD.tar"
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"
 
