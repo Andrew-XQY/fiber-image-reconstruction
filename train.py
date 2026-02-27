@@ -269,6 +269,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if model_name == "Pix2pix":
     G = G.to(device)
     D = D.to(device)
+    model = G
     # show_model_info(G)
     # show_model_info(D)
 elif model_name == "SwinT":
@@ -296,7 +297,11 @@ else:
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
 
-report = build_model_report(model, lambda: model(torch.randn(1, 1, 256, 256)))
+model_device = next(model.parameters()).device
+report = build_model_report(
+    model,
+    lambda: model(torch.randn(1, 1, 256, 256, device=model_device))
+)
 with open(f"{experiment_output_dir}/model_report.txt", "w", encoding="utf-8") as f:
     f.write(report)
 config_manager.save(output_dir=config["paths"]["output"], config_filename=config["name"])
