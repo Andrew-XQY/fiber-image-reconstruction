@@ -30,7 +30,7 @@ folder_name = f"{experiment_name}-{timestamp}"
 config_manager = ConfigManager(load_config(f"{experiment_name}.yaml",
                                            experiment_name=folder_name,
                                            machine=machine,
-                                           resolve=False))  # if failed to resolve some path, just skip
+                                           resolve=True))  # if failed to resolve some path, just skip
 config = config_manager.get()
 config_manager.add_files(config["extra_files"])
 
