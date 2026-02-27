@@ -72,12 +72,16 @@ sql:
     FROM mmf_dataset_metadata
     WHERE purpose = 'intensity_position' AND batch IN (9)
     ORDER BY image_path
-
   eval: |
     SELECT image_path
     FROM mmf_dataset_metadata
     WHERE experiment_description = 'local real beam image for evaluation'
       AND is_saturated_fiber_output = 0
+  background: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE experiment_description = 'empty (only black) image' 
+      AND batch IN (5)
 
 data:
   total_train_samples: 4000                     
@@ -93,6 +97,10 @@ data:
       - name: "torch_to_tensor"                 # Convert to tensor
       # - name: "torch_to_grayscale"              # Convert to grayscale
       - name: "torch_remap_range"               # Normalize pixel values to [0,1]
+      # - name: "torch_subtract_tensor"           # Subtract background tensor
+      #   params:
+      #     subtract_tensor: "background_provider" 
+      # - name: "torch_clip_below_zero"                   
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
           swap: True       
@@ -107,7 +115,7 @@ data:
             #     threshold_mode: "below"       
             - name: "torch_threshold"           # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
               params:
-                threshold: 0.098                # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.
+                threshold: 0.0                # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.   0.098
                 threshold_value: 0.0
                 threshold_mode: "below"    
   transforms_eval:                              # potentially for eval set with different process.
