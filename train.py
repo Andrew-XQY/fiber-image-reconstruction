@@ -1,8 +1,7 @@
 # pip install xflow-py
 from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T
 from xflow.data import build_transforms_from_config
-from xflow.utils import load_validated_config, save_image
-import xflow.extensions.physics
+from xflow.utils import save_image
 from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator
 from xflow.extensions.physics import pattern_gen
 
@@ -42,9 +41,11 @@ os.makedirs(experiment_output_dir, exist_ok=True)
 # Prepare Dataset
 # ====================
 
+# def make_dataset(provider):
+#     return PyTorchPipeline(provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
+
 # New structure, read the database table first, get files from it.
 # Extract tar file if needed
-
 dataset_tar_file = config["paths"]["processed_pure_dmd"]
 dataset_base_dir = os.path.dirname(dataset_tar_file)
 dataset_name = os.path.splitext(os.path.basename(dataset_tar_file))[0]  # Remove .tar extension
@@ -58,52 +59,6 @@ if not os.path.exists(dataset_extracted_dir):
     print(f"Extracted to {dataset_extracted_dir}")
 else:
     print(f"Dataset already extracted at {dataset_extracted_dir}")
-
-
-
-# dataset with batch folders (raw dataset structure)
-
-# # training set:
-# db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
-# query = """
-# SELECT 
-#     id, batch, purpose,  
-#     image_path, comments
-# FROM mmf_dataset_metadata 
-# --WHERE batch IN (2, 3)
-# """
-# train_provider = SqlProvider(
-#     sources={"connection": db_path, "sql": query}
-# )
-
-# # Get the DataFrame and update image paths
-# df = train_provider()
-# df['image_path'] = dataset_extracted_dir + '/' + df['image_path']
-# print("dataset read successfully, in total {} entries.".format(len(df)))
-
-# # validation + test set:
-# db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
-# query = """
-# SELECT 
-#     id, batch, purpose,  
-#     image_path, comments
-# FROM mmf_dataset_metadata 
-# --WHERE batch IN (2, 3)
-# """
-# evl_provider = SqlProvider(
-#     sources={"connection": db_path, "sql": query}
-# )
-# val_provider, test_provider = evl_provider.split_by_column(column="purpose", val1="validation", val2="test")
-
-# # data processing
-# transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
-# def make_dataset(provider):
-#     return PyTorchPipeline(provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
-
-# train_dataset = make_dataset(train_provider)
-# val_dataset = make_dataset(val_provider)
-# test_dataset = make_dataset(test_provider)
-
 
 # training set (basis -> generative pipeline)
 db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
@@ -123,9 +78,6 @@ config["data"]["transforms"]["torch"].insert(0, {
 })
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 
-
-
-    
 canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
 canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
 canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
@@ -149,9 +101,6 @@ train_dataset = CachedBasisPipeline(train_provider,
                                     eager=True).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
 val_dataset = PyTorchPipeline(val_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
 test_dataset = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
-
-
-
 
 print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))
@@ -300,7 +249,7 @@ else:
 model_device = next(model.parameters()).device
 report = build_model_report(
     model,
-    lambda: model(torch.randn(1, 1, 256, 256, device=model_device))
+    lambda: model(torch.randn(1, 1, *config["data"]["input_shape"], device=model_device))
 )
 with open(f"{experiment_output_dir}/model_report.txt", "w", encoding="utf-8") as f:
     f.write(report)
@@ -309,7 +258,7 @@ config_manager.save(output_dir=config["paths"]["output"], config_filename=config
 # ==================== 
 # Training
 # ====================
-from functools import partial
+from functools import parital
 
 from xflow import TorchTrainer, TorchGANTrainer
 from xflow.trainers import build_callbacks_from_config
