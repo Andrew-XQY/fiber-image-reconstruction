@@ -35,42 +35,36 @@ def detect_machine() -> str:
     )
 
 
-def _partial_resolve(cfg, node=None, key_path=""):
+def _partial_resolve(cfg):
     """
     Resolve config leaf by leaf.
     If one interpolation cannot be resolved, keep its original placeholder text.
     """
-    if node is None:
-        node = cfg
+    raw = OmegaConf.to_container(cfg, resolve=False)
 
-    if OmegaConf.is_dict(node):
-        return {
-            k: _partial_resolve(
+    def walk(node, key_path=""):
+        if isinstance(node, dict):
+            return {
+                k: walk(v, f"{key_path}.{k}" if key_path else k)
+                for k, v in node.items()
+            }
+
+        if isinstance(node, list):
+            return [
+                walk(v, f"{key_path}.{i}" if key_path else str(i))
+                for i, v in enumerate(node)
+            ]
+
+        try:
+            return OmegaConf.select(
                 cfg,
-                node[k],
-                f"{key_path}.{k}" if key_path else k
+                key_path,
+                throw_on_resolution_failure=True
             )
-            for k in node.keys()
-        }
+        except OmegaConfBaseException:
+            return node   # keep original unresolved value
 
-    if OmegaConf.is_list(node):
-        return [
-            _partial_resolve(
-                cfg,
-                node[i],
-                f"{key_path}.{i}" if key_path else str(i)
-            )
-            for i in range(len(node))
-        ]
-
-    try:
-        return OmegaConf.select(
-            cfg,
-            key_path,
-            throw_on_resolution_failure=True
-        )
-    except OmegaConfBaseException:
-        return str(node)
+    return walk(raw)
 
 
 def load_config(
