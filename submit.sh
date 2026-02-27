@@ -51,7 +51,7 @@ git -C "$CODE/XFlow" pull
 git -C "$CODE/examples/fiber-image-reconstruction-comparison" pull
 
 srun apptainer exec --nv --writable-tmpfs \
-  -B "$DATA:/workspace/dataset:ro" \
+  -B "$DATA:/workspace/dataset" \
   -B "$OUT:/workspace/results" \
   -B "$CODE:/workspace/code" \
   --env MACHINE=liverpool-hpc \
