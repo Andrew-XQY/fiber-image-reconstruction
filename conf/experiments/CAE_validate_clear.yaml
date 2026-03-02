@@ -114,8 +114,7 @@ data:
             #   params:
             #     threshold: 0.0                # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.   0.098
             #     threshold_value: 0.0
-            #     threshold_mode: "below"    
-    hooks:
+            #     threshold_mode: "below"              
 
   transforms_eval:                              # potentially for eval set with different process.
     torch:
