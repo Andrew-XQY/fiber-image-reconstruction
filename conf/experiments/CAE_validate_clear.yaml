@@ -9,7 +9,8 @@ file_extract: False
 note: |
   Saturday night DMD orth basis data used on SGM as training set, 
   validate with previous CLEAR beam image on the same DMD before and 
-  after the training set data collection time
+  after the training set data collection time. without orth basis background
+  removal. all raw images.
 
 paths:
   output: ${paths.output_root}                  # Comes from shared defaults
@@ -108,16 +109,14 @@ data:
         params:
           transforms:
             - name: "identity"                  # Fiber output   
-            # - name: "torch_threshold"          
+            - name: "identity" 
+            # - name: "torch_threshold"           # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
             #   params:
-            #     threshold: 5.0
+            #     threshold: 0.0                # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.   0.098
             #     threshold_value: 0.0
-            #     threshold_mode: "below"       
-            - name: "torch_threshold"           # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
-              params:
-                threshold: 0.0                # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.   0.098
-                threshold_value: 0.0
-                threshold_mode: "below"    
+            #     threshold_mode: "below"    
+    hooks:
+
   transforms_eval:                              # potentially for eval set with different process.
     torch:
       - name: "torch_load_image"                # Load the image based on file path
