@@ -258,8 +258,6 @@ config_manager.save(output_dir=config["paths"]["output"], config_filename=config
 # ==================== 
 # Training
 # ====================
-from functools import parital
-
 from xflow import TorchTrainer, TorchGANTrainer
 from xflow.trainers import build_callbacks_from_config
 from xflow.extensions.physics.beam import extract_beam_parameters
