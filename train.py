@@ -1,7 +1,7 @@
 # pip install xflow-py
 from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T
 from xflow.data import build_transforms_from_config
-from xflow.utils import save_image
+from xflow.utils import save_image, resolve_resource_dir
 from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator
 from xflow.extensions.physics import pattern_gen
 
@@ -47,13 +47,14 @@ dataset_name = os.path.splitext(os.path.basename(dataset_tar_file))[0]  # Remove
 dataset_extracted_dir = os.path.join(dataset_base_dir, dataset_name)
 
 # Unzip tar file if not already extracted
-if not os.path.exists(dataset_extracted_dir):
-    print(f"Extracting {dataset_tar_file}...")
-    with tarfile.open(dataset_tar_file, 'r') as tar:
-        tar.extractall(path=dataset_base_dir)
-    print(f"Extracted to {dataset_extracted_dir}")
-else:
-    print(f"Dataset already extracted at {dataset_extracted_dir}")
+# if not os.path.exists(dataset_extracted_dir):
+#     print(f"Extracting {dataset_tar_file}...")
+#     with tarfile.open(dataset_tar_file, 'r') as tar:
+#         tar.extractall(path=dataset_base_dir)
+#     print(f"Extracted to {dataset_extracted_dir}")
+# else:
+#     print(f"Dataset already extracted at {dataset_extracted_dir}")
+resolve_resource_dir(dataset_extracted_dir)
 
 # training set (basis -> generative pipeline)
 db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
