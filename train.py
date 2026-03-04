@@ -13,7 +13,6 @@ from functools import partial
 from config_utils import load_config, detect_machine
 from utils import *
 
-
 # ==================== 
 # Configuration
 # ==================== 
@@ -22,7 +21,8 @@ EVALUATE_ON_TEST = False  # whether to run evaluation on test set after training
 
 # Create experiment output directory  (timestamped)
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
-experiment_name = "CAE_validate_clear"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
+experiment_name = "CAE_validate_basis"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
+dataset = "cern_lab_20251106"  # "clear_chromox_friday"
 machine = detect_machine() 
 
 folder_name = f"{experiment_name}-{timestamp}"  
@@ -40,13 +40,8 @@ os.makedirs(experiment_output_dir, exist_ok=True)
 # ==================== 
 # Prepare Dataset
 # ====================
-
-# def make_dataset(provider):
-#     return PyTorchPipeline(provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
-
-# New structure, read the database table first, get files from it.
-# Extract tar file if needed
-dataset_tar_file = config["paths"]["processed_pure_dmd"]
+# New structure, read the database table first, get files from it. Extract tar file if needed
+dataset_tar_file = config["paths"][dataset]
 dataset_base_dir = os.path.dirname(dataset_tar_file)
 dataset_name = os.path.splitext(os.path.basename(dataset_tar_file))[0]  # Remove .tar extension
 dataset_extracted_dir = os.path.join(dataset_base_dir, dataset_name)
