@@ -32,7 +32,7 @@ config_manager = ConfigManager(load_config(f"{experiment_name}.yaml",
                                            resolve=True))  # if failed to resolve some path, just skip
 config = config_manager.get()
 config_manager.add_files(config["extra_files"])
-
+config_manager["dataset_used"] = dataset
 experiment_output_dir = config["paths"]["output"]
 os.makedirs(experiment_output_dir, exist_ok=True)
 
