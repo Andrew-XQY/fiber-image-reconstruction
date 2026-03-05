@@ -2,6 +2,7 @@ import sys
 import torch
 import torchvision.utils as vutils
 import math
+import numpy as np
 from pathlib import Path
 
 SAMPLE_FLATTENED = ['SHL_DNN']
@@ -145,3 +146,19 @@ def save_tensor_image_and_exit(tensor: torch.Tensor, path: str = "results/debug.
         print("[DEBUG] Not saving: expected CHW with C=1 or 3.")
 
     sys.exit(0)
+    
+    
+    
+# Datapipeline validator
+def max_value_validator(sample, record):
+    """
+    Return True if valid.
+    Reject if any ndarray element is > 1.0.
+    """
+    # sample can be ndarray or tuple of ndarrays
+    arrays = sample if isinstance(sample, tuple) else (sample,)
+
+    for arr in arrays:
+        if np.any(arr > 1.0):
+            return (False, f"pixel value exceeded 1.0 (max={float(np.max(arr)):.6f})")
+    return True
