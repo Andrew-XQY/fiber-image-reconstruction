@@ -1,5 +1,5 @@
 # pip install xflow-py
-from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T
+from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T, instantiate
 from xflow.data import build_transforms_from_config
 from xflow.utils import save_image, resolve_resource_dir
 from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator
@@ -39,7 +39,6 @@ os.makedirs(experiment_output_dir, exist_ok=True)
 # ==================== 
 # Prepare Dataset
 # ====================
-# New structure, read the database table first, get files from it. Extract tar file if needed
 dataset_tar_file = config["paths"][dataset]
 dataset_base_dir = os.path.dirname(dataset_tar_file)
 dataset_name = os.path.splitext(os.path.basename(dataset_tar_file))[0]  # Remove .tar extension
@@ -66,13 +65,14 @@ config["data"]["transforms"]["torch"].insert(0, {
 })
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 
+# ========== SGM simulation pattern generator ==========
 canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
 canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
 canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
 canvas.thresholding(config["simulation"]["minimum_pixel_threshold"])
 stream = canvas.pattern_stream(std_1=config["simulation"]["std_1"], std_2=config["simulation"]["std_2"],
                                max_intensity=config["simulation"]["max_intensity"], fade_rate=config["simulation"]["fade_rate"], 
-                               distribution=config["simulation"]["distribution"]) # (std_1=0.03, std_2=0.2, max_intensity=100, fade_rate=0.96, distribution='other'
+                               distribution=config["simulation"]["distribution"]) 
 
 # ======== random combinator using index + SGM ========
 combinator = IndexCombinator(
@@ -94,6 +94,7 @@ print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))
 
 model_name = config['model']['name']
+
 # save a sample from dataset for debugging
 if model_name in REGRESSION:
     for left_parts, params, right_parts in test_dataset:
@@ -114,32 +115,27 @@ else:
             save_image(left_parts[0], config["paths"]["output"] + "/input.png")
             save_image(right_parts[0], config["paths"]["output"] + "/output.png")
         break
-    
 
-# cut off, for logic clarity, the follow just need train_dataset, val_dataset, test_dataset.
 # ==================== 
 # Construct Model
 # ====================
 if model_name == "CAE":
     from models.CAE import Autoencoder2D
-    model = Autoencoder2D(
-        in_channels=int(config['model']["in_channels"]),
-        encoder=config['model']["encoder"],
-        decoder=config['model']["decoder"],
-        kernel_size=int(config['model']["kernel_size"]),
-        apply_batchnorm=config['model']["apply_batchnorm"],
-        apply_dropout=config['model']["apply_dropout"],
-        final_activation=str(config['model']["final_activation"]),
-    )
+    model = instantiate(Autoencoder2D, config["model"], allow_extra_kwargs=True)
 elif model_name == "TM":
     from models.TM import TransmissionMatrix
-    model = TransmissionMatrix(
-        input_height = config["data"]["input_shape"][0],
-        input_width = config["data"]["input_shape"][1],
-        output_height = config["data"]["output_shape"][0],
-        output_width = config["data"]["output_shape"][1],
-        initialization = "xavier",
-    )
+    model = instantiate(
+    TransmissionMatrix,
+    config["model"],
+    overrides={
+        "input_height": config["data"]["input_shape"][0],
+        "input_width":  config["data"]["input_shape"][1],
+        "output_height": config["data"]["output_shape"][0],
+        "output_width":  config["data"]["output_shape"][1],
+        "initialization": "xavier",
+    },
+    allow_extra_kwargs=True
+)
 elif model_name == "SHL_DNN":
     from models.SHL_DNN import SHLNeuralNetwork
     model = SHLNeuralNetwork(
@@ -150,28 +146,10 @@ elif model_name == "SHL_DNN":
     )
 elif model_name == "U_Net":
     from models.U_Net import UNet
-    model = UNet(
-        in_channels=config["model"]["in_channels"],
-        encoder=config["model"]["encoder"],
-        decoder=config["model"]["decoder"],
-        kernel_size=config["model"]["kernel_size"],
-        apply_batchnorm=config["model"]["apply_batchnorm"],
-        apply_dropout=config["model"]["apply_dropout"],
-        out_channels=config["model"]["out_channels"],
-        final_activation=config["model"]["final_activation"],
-    )
+    model = instantiate(UNet, config["model"], allow_extra_kwargs=True)
 elif model_name == "SwinT":
     from models.SwinT import SwinUNet, ReconLoss
-    model = SwinUNet(
-        img_size=config['model']['img_size'],
-        in_chans=config['model']['in_chans'],
-        out_chans=config['model']['out_chans'],
-        embed_dim=config['model']['embed_dim'],
-        depths=config['model']['depths'],
-        num_heads=config['model']['num_heads'],
-        window_size=config['model']['window_size'],
-        patch_size=config['model']['patch_size'],
-    )
+    model = instantiate(SwinUNet, config["model"], allow_extra_kwargs=True)
 elif model_name == "Pix2pix":
     from models.Pix2pix import Generator, Discriminator, Pix2PixLosses
     G = Generator(channels=config["model"]["channels"])
@@ -181,27 +159,9 @@ elif model_name == "Pix2pix":
     opt_d = torch.optim.Adam(D.parameters(), lr=config["training"]["learning_rate"], betas=config["training"]["betas"])
 elif model_name == "ERN":
     from models.ERN import EncoderRegressor
-    model = EncoderRegressor(
-            in_channels=config['model']['in_channels'],
-            kernel_size=config['model']['kernel_size'],
-            encoder=config['model']['encoder'],
-            decoder=config['model']['decoder'],
-            final_activation=config['model']['final_activation'],  
-        )
-elif model_name == "CAE_syth":
-    from models.CAE import Autoencoder2D
-    model = Autoencoder2D(
-        in_channels=int(config['model']["in_channels"]),
-        encoder=config['model']["encoder"],
-        decoder=config['model']["decoder"],
-        kernel_size=int(config['model']["kernel_size"]),
-        apply_batchnorm=config['model']["apply_batchnorm"],
-        apply_dropout=config['model']["apply_dropout"],
-        final_activation=str(config['model']["final_activation"]),
-    )
+    model = instantiate(EncoderRegressor, config["model"], allow_extra_kwargs=True)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 if model_name == "Pix2pix":
     G = G.to(device)

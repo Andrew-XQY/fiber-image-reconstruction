@@ -47,10 +47,9 @@ callbacks:
   - name: "torch_image_reconstruction_callback"
     params:
       save_dir: ${paths.output}                 # Directory to save results 
-      include_training_images: True           # Whether to include training images in the output
+      include_training_images: True             # Whether to include training images in the output
 
-
-simulation:
+simulation:                                     # (std_1=0.03, std_2=0.2, max_intensity=100, fade_rate=0.96, distribution='other'
   canvas_size: [256, 256]                                                  
   total_Guassian_num: 100                       # SGM total number of Guassian components
   max_intensity: 50                             # Max intensity for each Guassian component
