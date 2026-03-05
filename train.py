@@ -77,7 +77,7 @@ stream = canvas.pattern_stream(std_1=config["simulation"]["std_1"], std_2=config
 # ======== random combinator using index + SGM ========
 combinator = IndexCombinator(
     pattern_provider=stream,
-    post_transforms= build_transforms_from_config(config["data"]["post_transforms"]["torch"]),
+    transforms= build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
 )
 
 val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
