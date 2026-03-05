@@ -9,6 +9,7 @@ file_extract: False
 note: |
   11-06-2025 lab condition data, varified able to do modeless reconstruction
   training with orth basis connected to SGM, validate with previous CLEAR beam image on the same DMD replayed.
+  model bottle neck changed to 2x2, one layer deeper
 
 paths:
   output: ${paths.output_root}                  # Comes from shared defaults
@@ -25,10 +26,10 @@ model:
   in_channels: 1
   out_channels: 1
   kernel_size: 4
-  encoder:          [64,  128, 128, 256, 512, 512]      # 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4
-  decoder:          [512, 512, 256, 128, 128, 64 ]
-  apply_batchnorm:  [0,   1,   1,   1,   1,   1  ]
-  apply_dropout:    [1,   1,   0,   0,   0,   0  ]
+  encoder:          [32,  64,  64,  128, 256, 256, 512]      # 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2 (bottle neck)
+  decoder:          [512, 256, 256, 128, 64,  64,  32 ]
+  apply_batchnorm:  [0,   1,   1,   1,   1,   1,   1  ]
+  apply_dropout:    [1,   1,   0,   0,   0,   0,   0  ]
   final_activation: sigmoid
 
 training:
@@ -52,11 +53,11 @@ callbacks:
 simulation:                                     # (std_1=0.03, std_2=0.2, max_intensity=100, fade_rate=0.96, distribution='other'
   canvas_size: [256, 256]                                                  
   total_Guassian_num: 100                       # SGM total number of Guassian components
-  max_intensity: 50                             # Max intensity for each Guassian component
-  minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
-  fade_rate: 0.98                               # Controls how many active Guassian compoents in a probablistic way
+  max_intensity: 100                             # Max intensity for each Guassian component
+  minimum_pixel_threshold: 5.0                 # Cut off background level, below this value will be set to 0
+  fade_rate: 0.97                               # Controls how many active Guassian compoents in a probablistic way
   std_1: 0.015                                   # Guassian std lower bound
-  std_2: 0.05                                   # Guassian std upper bound
+  std_2: 0.08                                   # Guassian std upper bound
   distribution: "other" 
   process_functions:                           # before the 
     - name: "remap_range"                      # Normalize pixel values to [0,1]
@@ -83,7 +84,7 @@ sql:
       AND batch IN (5)
 
 data:
-  total_train_samples: 4000                     
+  total_train_samples: 5000                     
   train_val_split: 0.8                          # Train/validation split ratio 80/20
   val_test_split: 0.5                           # Validation/test split ratio 50/50
   input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
@@ -93,15 +94,17 @@ data:
       - name: "torch_load_image"                # Load the image based on file path
       - name: "torch_to_tensor"                 # Convert to tensor
       - name: "torch_remap_range"               # Normalize pixel values to [0,1]                 
-      - name: "torch_split_width"               # Split image into left/right halves on width
+      - name: "torch_split_width"               # Split image into left/right halves on width 
         params:
           swap: True       
       - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
         params:
           transforms:
-            - name: "identity"                  # Fiber output   
+            - name: "torch_scale"               # Fiber output
+              params:
+                scale_factor: 0.159             # Theoratical calculated scale factor to compensate camera gain and exposure difference during orth basis and eval collection
             - name: "identity" 
-            # - name: "torch_threshold"           # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
+            # - name: "torch_threshold"         # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
             #   params:
             #     threshold: 0.0                # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.   0.098
             #     threshold_value: 0.0

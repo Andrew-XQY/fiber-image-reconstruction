@@ -1,8 +1,8 @@
 # pip install xflow-py
-from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T, instantiate
+from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T, instantiate, show_model_info
 from xflow.data import build_transforms_from_config
 from xflow.utils import save_image, resolve_resource_dir
-from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator
+from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator, RetryPolicy
 from xflow.extensions.physics import pattern_gen
 
 import torch
@@ -69,7 +69,7 @@ transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
 canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
 canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
-canvas.thresholding(config["simulation"]["minimum_pixel_threshold"])
+canvas.set_threshold(config["simulation"]["minimum_pixel_threshold"])
 stream = canvas.pattern_stream(std_1=config["simulation"]["std_1"], std_2=config["simulation"]["std_2"],
                                max_intensity=config["simulation"]["max_intensity"], fade_rate=config["simulation"]["fade_rate"], 
                                distribution=config["simulation"]["distribution"]) 
@@ -167,8 +167,7 @@ if model_name == "Pix2pix":
     G = G.to(device)
     D = D.to(device)
     model = G
-    # show_model_info(G)
-    # show_model_info(D)
+    info = show_model_info(G) + show_model_info(D)
 elif model_name == "SwinT":
     from torch.optim.lr_scheduler import LambdaLR
     total_steps = config['training']['epochs'] * len(train_dataset)
@@ -190,10 +189,13 @@ elif model_name == "SwinT":
         eps=config['training']['eps'], weight_decay=config['training']['weight_decay']
     )
     scheduler = LambdaLR(optimizer, lr_lambda)
+    info = show_model_info(model)
 else:
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
+    info = show_model_info(model)
 
+print(info)
 model_device = next(model.parameters()).device
 report = build_model_report(
     model,
