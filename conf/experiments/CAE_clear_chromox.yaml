@@ -3,13 +3,11 @@
 # ====================
 
 seed: &seed 42                                  # 42, 168, 500
-name: &config "CAE_validate_basis.yaml"
+name: &config "CAE_clear_chromox.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  11-06-2025 lab condition data, varified able to do modeless reconstruction
-  training with orth basis connected to SGM, validate with previous CLEAR beam image on the same DMD replayed.
-  model bottle neck changed to 2x2, one layer deeper
+  2025 CLEAR chromox real beam dataset. 
 
 paths:
   output: ${paths.output_root}                  # Comes from shared defaults
@@ -22,8 +20,8 @@ paths:
   cern_lab_20251106: ${paths.datasets.cern_lab_20251106}
 
 model:
-  name: "CAE"                             # Factory key for model architecture
-  latent_dim: 512
+  name: "CAE"                                      # Factory key for model architecture
+  latent_dim: None                                 # Set to None for normal feature map, set scalar for vector quantization bottleneck           
   in_channels: 1
   out_channels: 1
   kernel_size: 4
@@ -101,9 +99,7 @@ data:
       - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
         params:
           transforms:
-            - name: "torch_scale"               # Fiber output
-              params:
-                scale_factor: 0.159             # Theoratical calculated scale factor to compensate camera gain and exposure difference during orth basis and eval collection
+            - name: "identity"                  # Fiber output
             - name: "identity" 
             # - name: "torch_threshold"         # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
             #   params:

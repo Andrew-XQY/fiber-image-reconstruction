@@ -81,14 +81,22 @@ combinator = IndexCombinator(
 )
 
 val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-train_dataset = CachedBasisPipeline(train_provider, 
-                                    combinator=combinator, 
-                                    transforms=transforms, 
-                                    num_samples=config["data"]["total_train_samples"], 
-                                    seed=config["seed"],
-                                    eager=True).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
-val_dataset = PyTorchPipeline(val_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
-test_dataset = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
+train_dataset = CachedBasisPipeline(
+    train_provider, 
+    combinator=combinator, 
+    transforms=transforms, 
+    num_samples=config["data"]["total_train_samples"], 
+    seed=config["seed"],
+    eager=True
+).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
+val_dataset = PyTorchPipeline(
+    val_provider, 
+    transforms[:-1]
+).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+test_dataset = PyTorchPipeline(
+    test_provider,
+    transforms[:-1]
+).to_memory_dataset(config["data"]["dataset_ops"])
 
 print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))

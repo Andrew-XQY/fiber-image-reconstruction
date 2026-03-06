@@ -97,7 +97,7 @@ class UpsampleBlock(nn.Module):
 
 def _init_weights_normal_002(m: nn.Module) -> None:
     """ Match Keras RandomNormal(stddev=0.02) for conv/deconv weights. """
-    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
         nn.init.normal_(m.weight, mean=0.0, std=0.02)
         if m.bias is not None:
             nn.init.zeros_(m.bias)
@@ -109,6 +109,12 @@ def _init_weights_normal_002(m: nn.Module) -> None:
 class Autoencoder2D(nn.Module):
     """
     TF-equivalent encoder-decoder without skip connections.
+
+    When `latent_dim` is provided, the bottleneck feature map is compressed into a
+    vector of shape `[batch, latent_dim]` using global average pooling + a linear
+    projection, then expanded back to the decoder input channel dimension.
+    Spatial bottleneck size is preserved by broadcasting the reconstructed channel
+    vector over the encoder bottleneck height and width observed at runtime.
     """
     def __init__(
         self,
@@ -120,12 +126,16 @@ class Autoencoder2D(nn.Module):
         apply_dropout: Optional[Sequence[Union[bool, int]]] = None,
         out_channels: Optional[int] = None,
         final_activation: str = "sigmoid",
+        latent_dim: Optional[int] = None,
     ):
         super().__init__()
         assert len(encoder) == len(decoder), "encoder and decoder must have same length"
         self.in_channels = int(in_channels)
         self.out_channels = int(out_channels) if out_channels is not None else self.in_channels
         self.kernel_size = int(kernel_size)
+        self.latent_dim = int(latent_dim) if latent_dim is not None else None
+        if self.latent_dim is not None and self.latent_dim < 1:
+            raise ValueError("latent_dim must be >= 1 when provided.")
 
         # keep original specs for exact round-trip saving
         self._encoder_spec = [int(x) for x in encoder]
@@ -144,9 +154,19 @@ class Autoencoder2D(nn.Module):
             prev = int(out)
         self.encoder = nn.ModuleList(enc_layers)
 
+        self.bottleneck_channels = int(self._encoder_spec[-1])
+        if self.latent_dim is not None:
+            self.latent_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.to_latent = nn.Linear(self.bottleneck_channels, self.latent_dim)
+            self.from_latent = nn.Linear(self.latent_dim, self.bottleneck_channels)
+        else:
+            self.latent_pool = None
+            self.to_latent = None
+            self.from_latent = None
+
         # Decoder
         dec_layers: List[nn.Module] = []
-        prev = int(self._encoder_spec[-1])
+        prev = self.bottleneck_channels
         for out, use_dp in zip(self._decoder_spec, dp_flags):
             dec_layers.append(UpsampleBlock(prev, int(out), kernel_size=self.kernel_size, apply_dropout=use_dp))
             prev = int(out)
@@ -176,19 +196,56 @@ class Autoencoder2D(nn.Module):
                 "decoder": list(self._decoder_spec),
                 "apply_batchnorm": [int(isinstance(l.bn, nn.BatchNorm2d)) for l in self.encoder],
                 "apply_dropout": [int(l.dropout is not None) for l in self.decoder],
+                "latent_dim": self.latent_dim,
                 "final_activation": "sigmoid" if isinstance(self.final_act, nn.Sigmoid)
                                    else "tanh" if isinstance(self.final_act, nn.Tanh)
                                    else "none",
             }
         }
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def encode_features(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.encoder:
             x = layer(x)
+        return x
+
+    def encode_latent(self, x: torch.Tensor) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[int, int]]]:
+        x = self.encode_features(x)
+        if self.latent_dim is None:
+            return x
+
+        z = self.latent_pool(x)
+        z = torch.flatten(z, start_dim=1)
+        z = self.to_latent(z)
+        return z, (x.shape[-2], x.shape[-1])
+
+    def decode_features(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.decoder:
             x = layer(x)
         x = self.final_conv(x)
         return self.final_act(x)
+
+    def decode_latent(
+        self,
+        latent: torch.Tensor,
+        spatial_shape: Optional[tuple[int, int]] = None,
+    ) -> torch.Tensor:
+        if self.latent_dim is None:
+            return self.decode_features(latent)
+
+        if spatial_shape is None:
+            raise ValueError("spatial_shape must be provided when latent_dim is enabled.")
+
+        x = self.from_latent(latent).unsqueeze(-1).unsqueeze(-1)
+        x = x.expand(-1, -1, spatial_shape[0], spatial_shape[1]).contiguous()
+        return self.decode_features(x)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        encoded = self.encode_latent(x)
+        if self.latent_dim is None:
+            return self.decode_features(encoded)
+
+        latent, spatial_shape = encoded
+        return self.decode_latent(latent, spatial_shape)
 
     # ---------------- new APIs ----------------
     def save_model(self, save_dir: str, model_name: str = "model") -> str:
@@ -208,6 +265,7 @@ class Autoencoder2D(nn.Module):
             # infer flags from layers to avoid external config dependencies
             "apply_batchnorm": [int(isinstance(l.bn, nn.BatchNorm2d)) for l in self.encoder],
             "apply_dropout":  [int(l.dropout is not None) for l in self.decoder],
+            "latent_dim": self.latent_dim,
             "final_activation": (
                 "sigmoid" if isinstance(self.final_act, nn.Sigmoid)
                 else "tanh" if isinstance(self.final_act, nn.Tanh)
@@ -244,6 +302,7 @@ class Autoencoder2D(nn.Module):
             apply_dropout=m.get("apply_dropout", None),
             out_channels=m.get("out_channels", None),
             final_activation=str(m.get("final_activation", "sigmoid")),
+            latent_dim=m.get("latent_dim", None),
         )
         model.load_state_dict(payload["state_dict"], strict=True)
 
