@@ -9,7 +9,7 @@ file_extract: False
 note: |
   11-06-2025 lab condition data, varified able to do modeless reconstruction
   training with orth basis connected to SGM, validate with previous CLEAR beam image on the same DMD replayed.
-  model bottle neck changed to 2x2, one layer deeper
+  model bottle neck changed to 1x1, one layer deeper
 
 paths:
   output: ${paths.output_root}                  # Comes from shared defaults
@@ -23,7 +23,7 @@ paths:
 
 model:
   name: "CAE"                             # Factory key for model architecture
-  latent_dim: 512
+  latent_dim: 256                               # when set, latent feature map convert to single scalars, like 4x4 -> 1, this is the scalar length
   in_channels: 1
   out_channels: 1
   kernel_size: 4

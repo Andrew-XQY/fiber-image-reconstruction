@@ -106,12 +106,34 @@ def _init_weights_normal_002(m: nn.Module) -> None:
         nn.init.zeros_(m.bias)
 
 
+class AttentionPool2d(nn.Module):
+    """
+    Trainable global pooling that outputs one value per channel.
+    """
+    def __init__(self, in_ch: int, hidden_ch: Optional[int] = None):
+        super().__init__()
+        h = int(hidden_ch) if hidden_ch is not None else max(16, in_ch // 4)
+        self.score = nn.Sequential(
+            nn.Conv2d(in_ch, h, kernel_size=1, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(h, 1, kernel_size=1, bias=True),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, h, w = x.shape
+        logits = self.score(x).view(b, 1, h * w)
+        attn = torch.softmax(logits, dim=-1)
+        x_flat = x.view(b, c, h * w)
+        pooled = torch.bmm(x_flat, attn.transpose(1, 2))
+        return pooled.view(b, c, 1, 1)
+
+
 class Autoencoder2D(nn.Module):
     """
     TF-equivalent encoder-decoder without skip connections.
 
     When `latent_dim` is provided, the bottleneck feature map is compressed into a
-    vector of shape `[batch, latent_dim]` using global average pooling + a linear
+    vector of shape `[batch, latent_dim]` using trainable attention pooling + a linear
     projection, then expanded back to the decoder input channel dimension.
     Spatial bottleneck size is preserved by broadcasting the reconstructed channel
     vector over the encoder bottleneck height and width observed at runtime.
@@ -156,7 +178,7 @@ class Autoencoder2D(nn.Module):
 
         self.bottleneck_channels = int(self._encoder_spec[-1])
         if self.latent_dim is not None:
-            self.latent_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.latent_pool = AttentionPool2d(self.bottleneck_channels)
             self.to_latent = nn.Linear(self.bottleneck_channels, self.latent_dim)
             self.from_latent = nn.Linear(self.latent_dim, self.bottleneck_channels)
         else:
