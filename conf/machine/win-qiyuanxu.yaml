@@ -10,3 +10,6 @@ paths:
     clear_chromox_saturday: "C:/Users/qiyuanxu/Documents/DataHub/datasets/2025-11-22-morning"
     processed_pure_dmd: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_DMD.tar"
     cern_lab_20251106: "C:/Users/qiyuanxu/Documents/DataHub/local_images/2025-11-06"
+    processed_dmd: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_DMD"
+    processed_chromox: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Chromox"
+    processed_yag: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Yag"
