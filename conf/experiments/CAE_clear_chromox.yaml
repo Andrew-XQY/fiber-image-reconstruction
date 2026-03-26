@@ -18,6 +18,9 @@ paths:
   clear_chromox_saturday: ${paths.datasets.clear_chromox_saturday}
   processed_pure_dmd: ${paths.datasets.processed_pure_dmd}
   cern_lab_20251106: ${paths.datasets.cern_lab_20251106}
+  processed_dmd: ${paths.datasets.processed_dmd}
+  processed_chromox: ${paths.datasets.processed_chromox}
+  processed_yag: ${paths.datasets.processed_yag}
 
 model:
   name: "CAE"                                      # Factory key for model architecture
