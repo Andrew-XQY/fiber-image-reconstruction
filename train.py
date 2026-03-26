@@ -2,7 +2,7 @@
 from xflow import ConfigManager, FileProvider, SqlProvider, PyTorchPipeline, build_model_report, TransformRegistry as T, instantiate, show_model_info
 from xflow.data import build_transforms_from_config
 from xflow.utils import save_image, resolve_resource_dir
-from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator, RetryPolicy
+from xflow.extensions.physics.pipeline import CachedBasisPipeline, IndexCombinator
 from xflow.extensions.physics import pattern_gen
 
 import torch
