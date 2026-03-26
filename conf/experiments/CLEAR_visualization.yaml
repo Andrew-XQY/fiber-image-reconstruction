@@ -56,6 +56,7 @@ sql:
     FROM mmf_dataset_metadata
     WHERE experiment_description = 'local real beam image for evaluation'
     AND is_saturated_fiber_output = 0
+
     
 data:
   total_train_samples: 4000                     
