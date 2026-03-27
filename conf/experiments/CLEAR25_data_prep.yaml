@@ -3,14 +3,11 @@
 # ====================
 
 seed: &seed 42                                  # 42, 168, 500
-name: &config "CAE_validate_clear.yaml"
+name: &config "CLEAR25_data_prep.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Saturday night DMD orth basis data used on SGM as training set, 
-  validate with previous CLEAR beam image on the same DMD before and 
-  after the training set data collection time. without orth basis background
-  removal. all raw images.
+  prepare each CLEAR 2025 dataset, crop, resize
 
 paths:
   output: ${paths.output_root}                  # Comes from shared defaults
