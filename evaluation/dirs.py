@@ -43,6 +43,16 @@ if any(win in machine for win in ["win", "windows"]): # windows
             "dataset_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Yag/",
             "output_db_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Yag/db/dataset_meta.db",
         },
+        
+        "Chromox_Laser_only": {
+            "output_dataset_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Chromox_Laser/dataset/",
+            "output_db_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Chromox_Laser/db/dataset_meta.db",
+        },
+        
+        "YAG_Laser_only": {
+            "output_dataset_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Yag_Laser/dataset/",
+            "output_db_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Yag_Laser/db/dataset_meta.db",
+        }   
     }
 
 elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
