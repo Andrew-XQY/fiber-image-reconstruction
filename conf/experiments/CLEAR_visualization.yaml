@@ -17,6 +17,7 @@ paths:
   clear_chromox_friday: ${paths.datasets.clear_chromox_friday}
   clear_chromox_saturday: ${paths.datasets.clear_chromox_saturday}
   processed_pure_dmd: ${paths.datasets.processed_pure_dmd}
+
   processed_dmd: ${paths.datasets.processed_dmd}
   processed_chromox: ${paths.datasets.processed_chromox}
   processed_yag: ${paths.datasets.processed_yag}
@@ -90,6 +91,7 @@ sql:
   yag_laser: |
     SELECT image_path
     FROM mmf_dataset_metadata
+    WHERE batch IN (13, 15, 16)
 
   train: |
     SELECT image_path
@@ -102,12 +104,12 @@ sql:
     WHERE experiment_description = 'local real beam image for evaluation'
     AND is_saturated_fiber_output = 0
 
-  temp_orth: |
+  lab_dmd_orth: |
     SELECT image_path
     FROM mmf_dataset_metadata
     WHERE batch IN (2)
     ORDER BY image_path
-  temp_eval: |
+  lab_dmd_eval: |
     SELECT image_path
     FROM mmf_dataset_metadata
     WHERE batch IN (3, 5, 6)
