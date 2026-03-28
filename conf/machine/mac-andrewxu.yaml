@@ -9,3 +9,10 @@ paths:
     clear_chromox_friday: "/Users/andrewxu/Documents/DataHub/datasets/2025-11-21"
     clear_chromox_saturday: "/Users/andrewxu/Documents/DataHub/datasets/2025-11-22-morning"
     dmd_01: "/Users/andrewxu/Documents/DataHub/datasets/2025-11-20_DMD_for_Wednesday_2"
+
+    processed_dmd: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_DMD"
+    processed_chromox: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Chromox"
+    processed_yag: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Yag"
+    processed_chromox_laser: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Chromox_Laser"
+    processed_yag_laser: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Yag_Laser"
+

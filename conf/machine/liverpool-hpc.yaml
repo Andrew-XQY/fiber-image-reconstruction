@@ -2,7 +2,13 @@
 paths:
   datasets:
     mmf: "/workspace/dataset/MMF"
-    processed_pure_dmd: "/workspace/dataset/CLEAR25_DMD.tar"
     cern_lab_20251106: "/workspace/dataset/2025-11-06"
+
+    processed_dmd: "/workspace/dataset/CLEAR25_DMD"
+    processed_chromox: "/workspace/dataset/CLEAR25_Chromox"
+    processed_yag: "/workspace/dataset/CLEAR25_Yag"
+    processed_chromox_laser: "/workspace/dataset/CLEAR25_Chromox_Laser"
+    processed_yag_laser: "/workspace/dataset/CLEAR25_Yag_Laser"
+
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"
 

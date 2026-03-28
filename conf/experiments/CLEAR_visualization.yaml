@@ -39,7 +39,7 @@ simulation:
   total_Guassian_num: 100                       # SGM total number of Guassian components
   max_intensity: 100                                  # Max intensity for each Guassian component
   minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
-  fade_rate: 0.96                               # Controls how many active Guassian compoents in a probablistic way
+  fade_rate: 0.98                               # Controls how many active Guassian compoents in a probablistic way
   std_1: 0.015                                  # Guassian std lower bound
   std_2: 0.08                                   # Guassian std upper bound
   distribution: "other" 
@@ -102,7 +102,18 @@ sql:
     WHERE experiment_description = 'local real beam image for evaluation'
     AND is_saturated_fiber_output = 0
 
-    
+  temp_orth: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE batch IN (2)
+    ORDER BY image_path
+  temp_eval: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE batch IN (3, 5, 6)
+
+
+
 data:
   total_train_samples: 4000                     
   train_val_split: 0.8                          # Train/validation split ratio 80/20
