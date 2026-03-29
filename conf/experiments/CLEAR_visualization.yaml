@@ -114,6 +114,14 @@ sql:
     FROM mmf_dataset_metadata
     WHERE batch IN (3, 5, 6)
 
+  cockcroft_dmd_train: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE is_calibration = 0 and purpose = 'training'
+  cockcroft_dmd_eval: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE is_calibration = 0 AND purpose = 'testing' AND comments IS NULL
 
 
 data:

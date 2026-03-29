@@ -65,6 +65,10 @@ elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
         
         "globel_save_to": "/Users/andrewxu/Desktop/",
         
+        "DMD_cockcroft": {
+            "dataset_db_dir": "/Users/andrewxu/Documents/DataHub/local_images/backup/2024-08-15/db/dataset_meta.db",
+            "dataset_extracted_dir": "/Users/andrewxu/Documents/DataHub/local_images/backup/2024-08-15/"
+        },
         "DMD_lab": {
             "dataset_db_dir": "/Users/andrewxu/Documents/DataHub/processed/2025-11-06/db/dataset_meta.db",
             "dataset_extracted_dir": "/Users/andrewxu/Documents/DataHub/processed/2025-11-06/"
