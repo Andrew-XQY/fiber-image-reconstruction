@@ -17,6 +17,15 @@ if any(win in machine for win in ["win", "windows"]): # windows
         
         "globel_save_to": "C:/Users/qiyuanxu/Desktop/",
         
+        "DMD_cockcroft": {
+            "dataset_db_dir": "C:/Users/qiyuanxu/Documents/DataHub/local_images/backup/2024-08-15/db/dataset_meta.db",
+            "dataset_extracted_dir": "C:/Users/qiyuanxu/Documents/DataHub/local_images/backup/2024-08-15/"
+        },
+        "DMD_lab": {
+            "dataset_db_dir": "C:/Users/qiyuanxu/Documents/DataHub/local_images/backup/2025-11-06/db/dataset_meta.db",
+            "dataset_extracted_dir": "C:/Users/qiyuanxu/Documents/DataHub/local_images/backup/2025-11-06/"
+        },
+        
         "DMD_only": {
             "dataset_db_dir": "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_DMD/db/dataset_meta.db",
             "dataset_extracted_dir": "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_DMD/",
