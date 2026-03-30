@@ -12,91 +12,123 @@ from functools import partial
 from config_utils import load_config, detect_machine
 from utils import *
 
-# ==================== 
-# Configuration
-# ==================== 
 # Future CLI parameters
-EVALUATE_ON_TEST = False  # whether to run evaluation on test set after training
-
+# ========================================
+# Configuration
+# ========================================
 # Create experiment output directory  (timestamped)
-timestamp = datetime.now().strftime("%Y%m%d%H%M%S")  
-experiment_name = "CAE_validate_basis"  # TM, SHL_DNN, U_Net, Pix2pix, ERN, CAE, SwinT
-dataset = "cern_lab_20251106"  # "clear_chromox_friday"
-machine = detect_machine() 
 
-folder_name = f"{experiment_name}-{timestamp}"  
-config_manager = ConfigManager(load_config(f"{experiment_name}.yaml",
-                                           experiment_name=folder_name,
-                                           machine=machine,
-                                           resolve=True))  # if failed to resolve some path, just skip
+experiment_name = "CLEAR25"
+dataset_sources = ["processed_chromox"]  # ["dataset_1", "dataset_2"]
+folder_name = f"{experiment_name}-{datetime.now():%Y%m%d%H%M%S}"
+
+config_manager = ConfigManager(
+    load_config(
+        f"{experiment_name}.yaml",
+        experiment_name=folder_name,
+        machine=detect_machine(),
+        resolve=True,
+    )
+)
 config = config_manager.get()
-config_manager.add_files(config["extra_files"])
-config_manager["dataset_used"] = dataset
-experiment_output_dir = config["paths"]["output"]
-os.makedirs(experiment_output_dir, exist_ok=True)
+config_manager.add_files(config.get("extra_files", []))
+config_manager["dataset_used"] = dataset_sources
 
+output_dir = Path(config["paths"]["output"])
+output_dir.mkdir(parents=True, exist_ok=True)
 
-# ==================== 
+# ======================================== 
 # Prepare Dataset
-# ====================
-dataset_tar_file = config["paths"][dataset]
-dataset_base_dir = os.path.dirname(dataset_tar_file)
-dataset_name = os.path.splitext(os.path.basename(dataset_tar_file))[0]  # Remove .tar extension
-dataset_extracted_dir = os.path.join(dataset_base_dir, dataset_name)
+# ========================================
+def resolve_dataset_dir(path_or_key: str) -> Path:
+    p = Path(config["paths"].get(path_or_key, path_or_key)).expanduser().resolve()
 
-# Unzip tar file if not already extracted
-resolve_resource_dir(dataset_extracted_dir)
+    if p.is_dir():
+        return p
 
-# training set (basis -> generative pipeline)
-db_path = f"{dataset_extracted_dir}/db/dataset_meta.db"
+    s = str(p).lower()
+    if s.endswith(".tar.gz"):
+        p = p.with_name(p.name[:-7])
+    elif s.endswith(".tgz"):
+        p = p.with_name(p.name[:-4])
+    elif p.suffix.lower() in {".tar", ".zip"}:
+        p = p.with_name(p.stem)
+
+    resolve_resource_dir(str(p))  # folder exists OR extract same-name archive
+    return p
+
+dataset_dirs = [resolve_dataset_dir(src) for src in dataset_sources]
+db_rel = config["dataset_structure"]["db"].lstrip("/\\")
+db_paths = [d / db_rel for d in dataset_dirs]
+
+# train_provider = SqlProvider(
+#     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_line_scan"]}, output_config={'list': "image_path"}
+# ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
+# eval_provider = SqlProvider(
+#     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_random_scan"]}, output_config={'list': "image_path"}
+# ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
+# val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+
 
 train_provider = SqlProvider(
-    sources={"connection": db_path, "sql": config["sql"]["train"]}, output_config={'list': "image_path"}
+    sources={"connection": db_paths[0], "sql": config["sql"]["chromox_random_scan"]}, output_config={'list': "image_path"}
 )
-eval_provider = SqlProvider(
-    sources={"connection": db_path, "sql": config["sql"]["eval"]}, output_config={'list': "image_path"}
-)
-# create data pipelines for ML training and evaluation
-config["data"]["transforms"]["torch"].insert(0, {
-    "name": "add_parent_dir",
-    "params": {
-        "parent_dir": dataset_extracted_dir
-    }
-})
+train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
+val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+
+
+# pad abs path to db saved relative dirs.
+for t in config["data"]["transforms"]["torch"]:
+    if t.get("name") == "add_parent_dir":
+        t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+        break
+    
 transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
 
-# ========== SGM simulation pattern generator ==========
-canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
-canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
-canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
-canvas.set_threshold(config["simulation"]["minimum_pixel_threshold"])
-stream = canvas.pattern_stream(std_1=config["simulation"]["std_1"], std_2=config["simulation"]["std_2"],
-                               max_intensity=config["simulation"]["max_intensity"], fade_rate=config["simulation"]["fade_rate"], 
-                               distribution=config["simulation"]["distribution"]) 
+# # ========== SGM simulation pattern generator ==========
+# canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
+# canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
+# canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
+# canvas.set_threshold(config["simulation"]["minimum_pixel_threshold"])
+# stream = canvas.pattern_stream(
+#     std_1=config["simulation"]["std_1"], 
+#     std_2=config["simulation"]["std_2"],
+#     max_intensity=config["simulation"]["max_intensity"], 
+#     fade_rate=config["simulation"]["fade_rate"], 
+#     distribution=config["simulation"]["distribution"]
+# ) 
 
-# ======== random combinator using index + SGM ========
-combinator = IndexCombinator(
-    pattern_provider=stream,
-    transforms= build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
-)
+# # ======== combinator using index + SGM ========
+# combinator = IndexCombinator(
+#     pattern_provider=stream,
+#     transforms= build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
+# )
 
-val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-train_dataset = CachedBasisPipeline(
+# train_dataset = CachedBasisPipeline(
+#     train_provider, 
+#     combinator=combinator, 
+#     transforms=transforms, 
+#     num_samples=config["data"]["total_train_samples"], 
+#     seed=config["seed"],
+#     eager=True
+# ).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
+
+train_dataset = PyTorchPipeline(
     train_provider, 
-    combinator=combinator, 
-    transforms=transforms, 
-    num_samples=config["data"]["total_train_samples"], 
-    seed=config["seed"],
-    eager=True
-).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
+    transforms
+).to_memory_dataset(config["data"]["dataset_ops"])  
+
 val_dataset = PyTorchPipeline(
     val_provider, 
-    transforms[:-1]
+    transforms
 ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+
 test_dataset = PyTorchPipeline(
     test_provider,
-    transforms[:-1]
+    transforms
 ).to_memory_dataset(config["data"]["dataset_ops"])
+
+
 
 print("Samples: ",len(train_provider),len(val_provider),len(test_provider))
 print("Batch: ",len(train_dataset),len(val_dataset),len(test_dataset))
@@ -124,9 +156,10 @@ else:
             save_image(right_parts[0], config["paths"]["output"] + "/output.png")
         break
 
-# ==================== 
+
+# ======================================== 
 # Construct Model
-# ====================
+# ======================================== 
 if model_name == "CAE":
     from models.CAE import Autoencoder2D
     model = instantiate(Autoencoder2D, config["model"], allow_extra_kwargs=True)
@@ -209,19 +242,20 @@ report = build_model_report(
     model,
     lambda: model(torch.randn(1, 1, *config["data"]["input_shape"], device=model_device))
 )
-with open(f"{experiment_output_dir}/model_report.txt", "w", encoding="utf-8") as f:
+with open(f"{config['paths']['output']}/model_report.txt", "w", encoding="utf-8") as f:
     f.write(report)
 config_manager.save(output_dir=config["paths"]["output"], config_filename=config["name"])
 
-# ==================== 
+
+# ======================================== 
 # Training
-# ====================
+# ======================================== 
 from xflow import TorchTrainer, TorchGANTrainer
 from xflow.trainers import build_callbacks_from_config
 from xflow.extensions.physics.beam import extract_beam_parameters
 
 # 1) loss/optimizer
-criterion = torch.nn.MSELoss()
+criterion = torch.nn.MSELoss()  # Pixel wise MSE loss.
 
 # 2) callbacks (unchanged) + any custom wiring
 callbacks = build_callbacks_from_config(
