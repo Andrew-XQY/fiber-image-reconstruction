@@ -17,7 +17,7 @@ def main():
     # Create experiment output directory  (timestamped)
 
     experiment_name = "CLEAR25"
-    dataset_sources = ["processed_chromox"]  # ["dataset_1", "dataset_2"]
+    dataset_sources = ["processed_chromox", "processed_chromox_laser"]  # ["dataset_1", "dataset_2"]
     folder_name = f"{experiment_name}-{datetime.now():%Y%m%d%H%M%S}"
 
     config_manager = ConfigManager(
@@ -36,12 +36,11 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # ========================================
-    # Prepare Dataset
+    # Prepare Dataset 
+    # need to manually resolve all complexity in utils, in here just interface to build final variables needed.
+    # Mainly just change providers, the pipelines are decoupled.
     # ========================================
     dataset_bundle = build_datasets(config, dataset_sources)
-    dataset_dirs = dataset_bundle["dataset_dirs"]
-    db_paths = dataset_bundle["db_paths"]
-    transforms = dataset_bundle["transforms"]
     train_provider = dataset_bundle["train_provider"]
     val_provider = dataset_bundle["val_provider"]
     test_provider = dataset_bundle["test_provider"]
@@ -77,6 +76,7 @@ def main():
 
     # ========================================
     # Construct Model
+    # also need to resolve all complexity in utils
     # ========================================
     model_bundle = build_model_for_training(config, train_dataset)
     model = model_bundle["model"]
