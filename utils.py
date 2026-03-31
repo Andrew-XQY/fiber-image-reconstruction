@@ -39,18 +39,13 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
     db_rel = config["dataset_structure"]["db"].lstrip("/\\")
     db_paths = [d / db_rel for d in dataset_dirs]
 
-    # train_provider = SqlProvider(
-    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_line_scan"]}, output_config={'list': "image_path"}
-    # ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
-    # eval_provider = SqlProvider(
-    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_random_scan"]}, output_config={'list': "image_path"}
-    # ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
-    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-
+    # multiple datasets (source).
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["chromox_random_scan"]}, output_config={'list': "image_path"}
-    )
-    train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
+        sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
+    )#.subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
+    eval_provider = SqlProvider(
+        sources={"connection": db_paths[1], "sql": config["sql"]["chromox_laser"]}, output_config={'list': "image_path"}
+    )#.subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
 
     # pad abs path to db saved relative dirs.
@@ -59,8 +54,33 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
             break
 
-    transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    
+    for t in config["data"]["transforms"]["torch"]:
+        if t.get("name") == "add_parent_dir":
+            t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
+            break
 
+    transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    
+
+    # single dataset (source).
+    # train_provider = SqlProvider(
+    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_random_scan"]}, output_config={'list': "image_path"}
+    # )
+    # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+
+    # # pad abs path to db saved relative dirs.
+    # for t in config["data"]["transforms"]["torch"]:
+    #     if t.get("name") == "add_parent_dir":
+    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+    #         break
+
+    # transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    
+    
+    # Pipeline that using data augmentation.
     # # ========== SGM simulation pattern generator ==========
     # canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
     # canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
@@ -89,25 +109,24 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
     #     eager=True
     # ).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
 
+
+    # normally leave the pipelines decoupled and untouched so the output interface remains consistent.
     train_dataset = PyTorchPipeline(
         train_provider,
-        transforms
+        transforms_1
     ).to_memory_dataset(config["data"]["dataset_ops"])
 
     val_dataset = PyTorchPipeline(
         val_provider,
-        transforms
+        transforms_2
     ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
 
     test_dataset = PyTorchPipeline(
         test_provider,
-        transforms
+        transforms_2
     ).to_memory_dataset(config["data"]["dataset_ops"])
 
     return {
-        "dataset_dirs": dataset_dirs,
-        "db_paths": db_paths,
-        "transforms": transforms,
         "train_provider": train_provider,
         "val_provider": val_provider,
         "test_provider": test_provider,

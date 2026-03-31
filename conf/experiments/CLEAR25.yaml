@@ -55,6 +55,12 @@ sql:
   chromox_all: |
     SELECT image_path
     FROM mmf_dataset_metadata
+    WHERE purpose IN ('real beam orthogonal acquisition', 'testset')
+      AND is_saturated_ground_truth = 0
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
+      AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
+      AND CAST(json_extract(camera_config, '$.speckle_camera_gain') AS INTEGER) = 0;
   chromox_line_scan: |
     SELECT image_path
     FROM mmf_dataset_metadata
@@ -69,6 +75,14 @@ sql:
     FROM mmf_dataset_metadata
     WHERE purpose = 'testset'
       AND is_saturated_ground_truth = 0
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
+      AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
+      AND CAST(json_extract(camera_config, '$.speckle_camera_gain') AS INTEGER) = 0;
+  chromox_laser: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE comments = 'CLEAR beamtime; ND filter 3; red laser scan'
       AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
       AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
       AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
