@@ -17,6 +17,7 @@ paths:
   clear_chromox_friday: ${paths.datasets.clear_chromox_friday}
   clear_chromox_saturday: ${paths.datasets.clear_chromox_saturday}
   processed_pure_dmd: ${paths.datasets.processed_pure_dmd}
+  clear_2022: ${paths.datasets.clear_2022}
 
   processed_dmd: ${paths.datasets.processed_dmd}
   processed_chromox: ${paths.datasets.processed_chromox}
@@ -59,6 +60,7 @@ sql:
     SELECT image_path
     FROM mmf_dataset_metadata
     WHERE purpose = 'real beam orthogonal acquisition'
+      AND is_saturated_ground_truth = 0
       AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
       AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
       AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
@@ -76,6 +78,9 @@ sql:
   yag_all: |
     SELECT image_path
     FROM mmf_dataset_metadata
+    WHERE is_saturated_ground_truth = 0
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 150000
+      AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 150000
   yag_line_scan: |
     SELECT image_path
     FROM mmf_dataset_metadata
@@ -85,13 +90,16 @@ sql:
     FROM mmf_dataset_metadata
     WHERE (comments NOT LIKE '%otrh scan%' OR comments IS NULL)
 
+
   chromox_laser: |
     SELECT image_path
     FROM mmf_dataset_metadata
   yag_laser: |
     SELECT image_path
     FROM mmf_dataset_metadata
-    WHERE batch IN (13, 15, 16)
+    WHERE is_saturated_ground_truth = 0
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 150000
+      AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 150000;
 
   train: |
     SELECT image_path
@@ -122,6 +130,9 @@ sql:
     SELECT image_path
     FROM mmf_dataset_metadata
     WHERE is_calibration = 0 AND purpose = 'testing' AND comments IS NULL
+
+dataset_structure:
+  db: "/db/dataset_meta.db"                     # Path to the SQLite database containing dataset metadata
 
 
 data:
