@@ -41,10 +41,10 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
 
     # multiple datasets (source).
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"]["yag_all"]}, output_config={'list': "image_path"}
     ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
     eval_provider = SqlProvider(
-        sources={"connection": db_paths[1], "sql": config["sql"]["chromox_laser"]}, output_config={'list': "image_path"}
+        sources={"connection": db_paths[1], "sql": config["sql"]["yag_laser"]}, output_config={'list': "image_path"}
     ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
 
