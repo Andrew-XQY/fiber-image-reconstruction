@@ -44,12 +44,12 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
         sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
     ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
     
-    train_provider, eval_provider = train_provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
-    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
-    # eval_provider = SqlProvider(
-    #     sources={"connection": db_paths[1], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
-    # ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
-    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+    # train_provider, eval_provider = train_provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
+    eval_provider = SqlProvider(
+        sources={"connection": db_paths[1], "sql": config["sql"]["dmd_all"]}, output_config={'list': "image_path"}
+    ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
+    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
 
     # pad abs path to db saved relative dirs.
     for t in config["data"]["transforms"]["torch"]:
