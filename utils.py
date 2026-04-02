@@ -41,12 +41,15 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
 
     # multiple datasets (source).
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["yag_all"]}, output_config={'list': "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
     ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
-    eval_provider = SqlProvider(
-        sources={"connection": db_paths[1], "sql": config["sql"]["yag_laser"]}, output_config={'list': "image_path"}
-    ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
-    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+    
+    train_provider, eval_provider = train_provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
+    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
+    # eval_provider = SqlProvider(
+    #     sources={"connection": db_paths[1], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
+    # ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
 
     # pad abs path to db saved relative dirs.
     for t in config["data"]["transforms"]["torch"]:
@@ -56,13 +59,17 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
 
     transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
     
-    for t in config["data"]["transforms"]["torch"]:
-        if t.get("name") == "add_parent_dir":
-            t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
-            break
+    try:
+        for t in config["data"]["transforms"]["torch"]:
+            if t.get("name") == "add_parent_dir":
+                t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
+                break
 
-    transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    
+        transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    except Exception as e:
+        print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
+        transforms_2 = transforms_1
+        
 
     # single dataset (source).
     # train_provider = SqlProvider(
