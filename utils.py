@@ -56,7 +56,6 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
         if t.get("name") == "add_parent_dir":
             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
             break
-
     transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
     
     try:
@@ -64,7 +63,6 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
             if t.get("name") == "add_parent_dir":
                 t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
                 break
-
         transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
     except Exception as e:
         print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
