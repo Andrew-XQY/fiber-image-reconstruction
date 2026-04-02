@@ -17,7 +17,7 @@ def main():
     # Create experiment output directory  (timestamped)
 
     experiment_name = "CLEAR25"
-    dataset_sources = ["processed_chromox"]  # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser"]
+    dataset_sources = ["processed_chromox", "processed_dmd"]  # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser"]
     folder_name = f"{experiment_name}-{datetime.now():%Y%m%d%H%M%S}"
 
     config_manager = ConfigManager(
