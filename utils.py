@@ -4,7 +4,7 @@ import torchvision.utils as vutils
 import math
 import numpy as np
 from pathlib import Path
-from xflow import SqlProvider, PyTorchPipeline, instantiate, show_model_info
+from xflow import SqlProvider, FileProvider, PyTorchPipeline, instantiate, show_model_info, TransformRegistry as T
 from xflow.data import build_transforms_from_config
 from xflow.utils import resolve_resource_dir
 
@@ -40,33 +40,33 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
     db_paths = [d / db_rel for d in dataset_dirs]
 
     # multiple datasets (source).
-    train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
-    ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
-    
-    # train_provider, eval_provider = train_provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
-    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
-    eval_provider = SqlProvider(
-        sources={"connection": db_paths[1], "sql": config["sql"]["dmd_all"]}, output_config={'list': "image_path"}
-    ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
-    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-
-    # pad abs path to db saved relative dirs.
-    for t in config["data"]["transforms"]["torch"]:
-        if t.get("name") == "add_parent_dir":
-            t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
-            break
-    transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    
-    try:
-        for t in config["data"]["transforms"]["torch"]:
-            if t.get("name") == "add_parent_dir":
-                t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
-                break
-        transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    except Exception as e:
-        print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
-        transforms_2 = transforms_1
+    # train_provider = SqlProvider(
+    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
+    # ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
+    # # train_provider, eval_provider = train_provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
+    # # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
+    # eval_provider = SqlProvider(
+    #     sources={"connection": db_paths[1], "sql": config["sql"]["dmd_all"]}, output_config={'list': "image_path"}
+    # ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+    # # pad abs path to db saved relative dirs.
+    # for t in config["data"]["transforms"]["torch"]:
+    #     if t.get("name") == "add_parent_dir":
+    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+    #         break
+    # transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    # try:
+    #     for t in config["data"]["transforms"]["torch"]:
+    #         if t.get("name") == "add_parent_dir":
+    #             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
+    #             break
+    #     transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    # except Exception as e:
+    #     print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
+    #     transforms_2 = transforms_1
+        
+        
+        
         
 
     # single dataset (source).
@@ -75,17 +75,13 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
     # )
     # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
     # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-
     # # pad abs path to db saved relative dirs.
     # for t in config["data"]["transforms"]["torch"]:
     #     if t.get("name") == "add_parent_dir":
     #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
     #         break
-
     # transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    
-    
-    # Pipeline that using data augmentation.
+    # # Pipeline that using data augmentation.
     # # ========== SGM simulation pattern generator ==========
     # canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
     # canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
@@ -98,13 +94,11 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
     #     fade_rate=config["simulation"]["fade_rate"],
     #     distribution=config["simulation"]["distribution"]
     # )
-
     # # ======== combinator using index + SGM ========
     # combinator = IndexCombinator(
     #     pattern_provider=stream,
     #     transforms= build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
     # )
-
     # train_dataset = CachedBasisPipeline(
     #     train_provider,
     #     combinator=combinator,
@@ -115,22 +109,28 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
     # ).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
 
 
+
+    # direct file loading pattern 
+    train = FileProvider(root_paths=config["paths"]["clear_2022"])
+    train_provider, eval_provider = train.split(config["data"]["train_val_split"], seed=config["seed"])
+    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
+    transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])[1:] # direct file do not need abs root.
+    transforms.insert(2, T.get("torch_to_grayscale")) 
+    transforms_1 = transforms.copy()
+    transforms_2 = transforms.copy()
     # normally leave the pipelines decoupled and untouched so the output interface remains consistent.
     train_dataset = PyTorchPipeline(
         train_provider,
         transforms_1
     ).to_memory_dataset(config["data"]["dataset_ops"])
-
     val_dataset = PyTorchPipeline(
         val_provider,
         transforms_2
     ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
-
     test_dataset = PyTorchPipeline(
         test_provider,
         transforms_2
     ).to_memory_dataset(config["data"]["dataset_ops"])
-
     return {
         "train_provider": train_provider,
         "val_provider": val_provider,
@@ -139,6 +139,8 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
         "val_dataset": val_dataset,
         "test_dataset": test_dataset,
     }
+
+
 
 
 # ========================================

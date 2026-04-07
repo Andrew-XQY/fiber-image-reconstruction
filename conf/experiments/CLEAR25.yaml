@@ -17,6 +17,7 @@ paths:
   clear_chromox_friday: ${paths.datasets.clear_chromox_friday}
   clear_chromox_saturday: ${paths.datasets.clear_chromox_saturday}
   processed_pure_dmd: ${paths.datasets.processed_pure_dmd}
+  clear_2022: ${paths.datasets.clear_2022}
 
   processed_dmd: ${paths.datasets.processed_dmd}
   processed_chromox: ${paths.datasets.processed_chromox}
