@@ -31,4 +31,10 @@ git clone https://github.com/Andrew-XQY/fiber-image-reconstruction-comparison.gi
 git pull
 ```
 
+---
+
+## Collaboration
+
+This project is actively developed by Andrew Xu, with HAL assisting as an AI research copilot for code, debugging, and documentation support.
+
 
