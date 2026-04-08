@@ -1,7 +1,7 @@
 # conf/machine/liverpool-hpc.yaml
 paths:
   datasets:
-    mmf: "/workspace/dataset/MMF"
+    clear_2022: "/workspace/dataset/MMF"
     cern_lab_20251106: "/workspace/dataset/2025-11-06"
 
     processed_dmd: "/workspace/dataset/CLEAR25_DMD"
