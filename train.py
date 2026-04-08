@@ -15,11 +15,8 @@ def main():
     # Configuration
     # ========================================
     # Create experiment output directory  (timestamped)
-
     experiment_name = "CLEAR25"
-    dataset_sources = ["processed_chromox", "processed_dmd"]  # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser"]
     folder_name = f"{experiment_name}-{datetime.now():%Y%m%d%H%M%S}"
-
     config_manager = ConfigManager(
         load_config(
             f"{experiment_name}.yaml",
@@ -30,8 +27,6 @@ def main():
     )
     config = config_manager.get()
     config_manager.add_files(config.get("extra_files", []))
-    config_manager["dataset_used"] = dataset_sources
-
     output_dir = Path(config["paths"]["output"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -40,13 +35,14 @@ def main():
     # need to manually resolve all complexity in utils, in here just interface to build final variables needed.
     # Mainly just change providers, the pipelines are decoupled.
     # ========================================
-    dataset_bundle = build_datasets(config, dataset_sources)
+    dataset_bundle = build_datasets(config)
     train_provider = dataset_bundle["train_provider"]
     val_provider = dataset_bundle["val_provider"]
     test_provider = dataset_bundle["test_provider"]
     train_dataset = dataset_bundle["train_dataset"]
     val_dataset = dataset_bundle["val_dataset"]
     test_dataset = dataset_bundle["test_dataset"]
+    config_manager["dataset_used"] = dataset_bundle["dataset_sources"]
 
     print("Samples: ", len(train_provider), len(val_provider), len(test_provider))
     print("Batch: ", len(train_dataset), len(val_dataset), len(test_dataset))

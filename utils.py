@@ -34,7 +34,9 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
     return p
 
 
-def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
+def build_datasets(config: dict) -> dict:
+    # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser", "clear_2022"]
+    dataset_sources = ["clear_2022"]  
     dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
     db_rel = config["dataset_structure"]["db"].lstrip("/\\")
     db_paths = [d / db_rel for d in dataset_dirs]
@@ -68,7 +70,6 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
         
         
         
-
     # single dataset (source).
     # train_provider = SqlProvider(
     #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_random_scan"]}, output_config={'list': "image_path"}
@@ -111,13 +112,18 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
 
 
     # direct file loading pattern 
-    train = FileProvider(root_paths=config["paths"]["clear_2022"])
+    folder_1 = dataset_sources[0]
+    train = FileProvider(root_paths=config["paths"][folder_1])
     train_provider, eval_provider = train.split(config["data"]["train_val_split"], seed=config["seed"])
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
     transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])[1:] # direct file do not need abs root.
     transforms.insert(2, T.get("torch_to_grayscale")) 
     transforms_1 = transforms.copy()
     transforms_2 = transforms.copy()
+    
+    
+    
+    
     # normally leave the pipelines decoupled and untouched so the output interface remains consistent.
     train_dataset = PyTorchPipeline(
         train_provider,
@@ -138,6 +144,7 @@ def build_datasets(config: dict, dataset_sources: list[str]) -> dict:
         "train_dataset": train_dataset,
         "val_dataset": val_dataset,
         "test_dataset": test_dataset,
+        "dataset_sources": dataset_sources,
     }
 
 
