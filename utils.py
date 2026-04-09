@@ -42,30 +42,28 @@ def build_datasets(config: dict) -> dict:
     db_paths = [d / db_rel for d in dataset_dirs]
 
     # multiple datasets (source).
-    # train_provider = SqlProvider(
-    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
-    # ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
-    # # train_provider, eval_provider = train_provider.split(ratio=config["data"]["train_val_split"], seed=config["seed"])
-    # # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
-    # eval_provider = SqlProvider(
-    #     sources={"connection": db_paths[1], "sql": config["sql"]["dmd_all"]}, output_config={'list': "image_path"}
-    # ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
-    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-    # # pad abs path to db saved relative dirs.
-    # for t in config["data"]["transforms"]["torch"]:
-    #     if t.get("name") == "add_parent_dir":
-    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
-    #         break
-    # transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    # try:
-    #     for t in config["data"]["transforms"]["torch"]:
-    #         if t.get("name") == "add_parent_dir":
-    #             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
-    #             break
-    #     transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    # except Exception as e:
-    #     print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
-    #     transforms_2 = transforms_1
+    train_provider = SqlProvider(
+        sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
+    ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
+    eval_provider = SqlProvider(
+        sources={"connection": db_paths[1], "sql": config["sql"]["dmd_all"]}, output_config={'list': "image_path"}
+    ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
+    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+    # pad abs path to db saved relative dirs.
+    for t in config["data"]["transforms"]["torch"]:
+        if t.get("name") == "add_parent_dir":
+            t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+            break
+    transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    try:
+        for t in config["data"]["transforms"]["torch"]:
+            if t.get("name") == "add_parent_dir":
+                t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
+                break
+        transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    except Exception as e:
+        print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
+        transforms_2 = transforms_1
         
         
         
@@ -112,14 +110,14 @@ def build_datasets(config: dict) -> dict:
 
 
     # direct file loading pattern 
-    folder_1 = dataset_sources[0]
-    train = FileProvider(root_paths=config["paths"][folder_1])
-    train_provider, eval_provider = train.split(config["data"]["train_val_split"], seed=config["seed"])
-    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
-    transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])[1:] # direct file do not need abs root.
-    transforms.insert(2, T.get("torch_to_grayscale")) 
-    transforms_1 = transforms.copy()
-    transforms_2 = transforms.copy()
+    # folder_1 = dataset_sources[0]
+    # train = FileProvider(root_paths=config["paths"][folder_1])
+    # train_provider, eval_provider = train.split(config["data"]["train_val_split"], seed=config["seed"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
+    # transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])[1:] # direct file do not need abs root.
+    # transforms.insert(2, T.get("torch_to_grayscale")) 
+    # transforms_1 = transforms.copy()
+    # transforms_2 = transforms.copy()
     
     
     

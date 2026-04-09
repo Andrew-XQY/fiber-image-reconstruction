@@ -17,3 +17,5 @@ paths:
     processed_yag: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Yag"
     processed_chromox_laser: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Chromox_Laser"
     processed_yag_laser: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Yag_Laser"
+    
+    processed_chromox_cropped: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Chromox_Cropped"

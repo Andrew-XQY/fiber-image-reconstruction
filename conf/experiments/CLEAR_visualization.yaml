@@ -25,6 +25,9 @@ paths:
   processed_chromox_laser: ${paths.datasets.processed_chromox_laser}
   processed_yag_laser: ${paths.datasets.processed_yag_laser}
 
+  processed_chromox_cropped: ${paths.datasets.processed_chromox_cropped}
+
+
 model:
   name: "CAE"                             # Factory key for model architecture
   in_channels: 1
@@ -130,6 +133,18 @@ sql:
     SELECT image_path
     FROM mmf_dataset_metadata
     WHERE is_calibration = 0 AND purpose = 'testing' AND comments IS NULL
+
+  processed_chromox_cropped: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE purpose = 'real beam orthogonal acquisition'
+      AND is_saturated_ground_truth = 0
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
+      AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
+      AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
+      AND CAST(json_extract(camera_config, '$.speckle_camera_gain') AS INTEGER) = 0;
+
+
 
 dataset_structure:
   db: "/db/dataset_meta.db"                     # Path to the SQLite database containing dataset metadata
