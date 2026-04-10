@@ -160,7 +160,7 @@ def main():
 
     # 4) save results
     trainer.save_history(f"{config['paths']['output']}/history.json")
-    model.save_model(config['paths']['output'], model_name="model.pt")
+    model.save_model(config['paths']['output'])
     # trainer.save_model(config["paths"]["output"])  # uses model.save_model(...) if available
     print("Training ALL complete.")
 
