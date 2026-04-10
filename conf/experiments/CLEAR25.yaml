@@ -129,7 +129,7 @@ dataset_structure:
 
 
 data:
-  total_train_samples: 20000       
+  total_train_samples: 18000       
   total_val_samples: 3000              
   train_val_split: 0.9                          # Train/validation split ratio 90/10
   val_test_split: 0.5                           # Validation/test split ratio 50/50

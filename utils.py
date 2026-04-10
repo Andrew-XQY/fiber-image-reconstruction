@@ -18,10 +18,8 @@ GAN = ['Pix2pix']
 # ========================================
 def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
     p = Path(config["paths"].get(path_or_key, path_or_key)).expanduser().resolve()
-
     if p.is_dir():
         return p
-
     s = str(p).lower()
     if s.endswith(".tar.gz"):
         p = p.with_name(p.name[:-7])
@@ -29,7 +27,6 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
         p = p.with_name(p.name[:-4])
     elif p.suffix.lower() in {".tar", ".zip"}:
         p = p.with_name(p.stem)
-
     resolve_resource_dir(str(p))  # folder exists OR extract same-name archive
     return p
 
@@ -40,7 +37,9 @@ def build_datasets(config: dict) -> dict:
     dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
     db_rel = config["dataset_structure"]["db"].lstrip("/\\")
     db_paths = [d / db_rel for d in dataset_dirs]
-
+    
+    
+    
     # multiple datasets (source).
     train_provider = SqlProvider(
         sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
