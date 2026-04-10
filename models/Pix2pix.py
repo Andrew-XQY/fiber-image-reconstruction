@@ -114,7 +114,7 @@ class Generator(nn.Module):
             "state_dict": self.state_dict(),
             "torch_version": torch.__version__,
         }
-        filepath = os.path.join(save_dir, f"{model_name}.pth")
+        filepath = os.path.join(save_dir, f"{model_name}.pt")
         torch.save(payload, filepath)
         return filepath
 
@@ -181,7 +181,7 @@ class Discriminator(nn.Module):
             "state_dict": self.state_dict(),
             "torch_version": torch.__version__,
         }
-        filepath = os.path.join(save_dir, f"{model_name}.pth")
+        filepath = os.path.join(save_dir, f"{model_name}.pt")
         torch.save(payload, filepath)
         return filepath
 

@@ -359,7 +359,7 @@ class SwinUNet(nn.Module):
     
     def save_model(self, save_dir: str, model_name: str = "model") -> str:
         """
-        Saves weights + constructor config into a single .pth file.
+        Saves weights + constructor config into a single .pt file.
 
         Args:
             save_dir (str): Directory to save the checkpoint.
@@ -369,7 +369,7 @@ class SwinUNet(nn.Module):
             str: Full path to the saved file.
         """
         os.makedirs(save_dir, exist_ok=True)
-        ckpt_path = os.path.join(save_dir, f"{model_name}.pth")
+        ckpt_path = os.path.join(save_dir, f"{model_name}.pt")
 
         config = dict(
             img_size=self.img_size,

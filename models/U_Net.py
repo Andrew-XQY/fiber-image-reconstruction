@@ -243,9 +243,9 @@ class UNet(nn.Module):
     # ---------------- save/load API (same shape as your autoencoder) ----------------
 
     def save_model(self, save_dir: str, model_name: str = "model") -> str:
-        """Save a single .pth with state_dict + minimal architecture info."""
+        """Save a single .pt with state_dict + minimal architecture info."""
         os.makedirs(save_dir, exist_ok=True)
-        path = os.path.join(save_dir, f"{model_name}.pth")
+        path = os.path.join(save_dir, f"{model_name}.pt")
         arch = {
             "in_channels": self.in_channels,
             "out_channels": self.out_channels,
