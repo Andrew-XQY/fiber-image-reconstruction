@@ -81,10 +81,10 @@ class EncoderRegressor(nn.Module):
     # -----------------------------
     def save_model(self, save_dir: str, model_name: str = "model") -> str:
         """
-        Save state_dict + config in one .pth file. Returns the path.
+        Save state_dict + config in one .pt file. Returns the path.
         """
         os.makedirs(save_dir, exist_ok=True)
-        path = os.path.join(save_dir, f"{model_name}.pth")
+        path = os.path.join(save_dir, f"{model_name}.pt")
         torch.save({"state_dict": self.state_dict(), "config": self.config}, path)
         return path
 

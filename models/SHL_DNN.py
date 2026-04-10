@@ -41,7 +41,7 @@ class SHLNeuralNetwork(nn.Module):
         os.makedirs(save_dir, exist_ok=True)
         
         # Save state dict
-        model_path = os.path.join(save_dir, f"{model_name}.pth")
+        model_path = os.path.join(save_dir, f"{model_name}.pt")
         
         # Save both model state and metadata
         save_dict = {

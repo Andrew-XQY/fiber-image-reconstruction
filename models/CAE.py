@@ -272,11 +272,11 @@ class Autoencoder2D(nn.Module):
     # ---------------- new APIs ----------------
     def save_model(self, save_dir: str, model_name: str = "model") -> str:
         """
-        Save a single .pth with state_dict + minimal architecture info.
+        Save a single .pt with state_dict + minimal architecture info.
         Returns the file path.
         """
         os.makedirs(save_dir, exist_ok=True)
-        path = os.path.join(save_dir, f"{model_name}.pth")
+        path = os.path.join(save_dir, f"{model_name}.pt")
 
         arch = {
             "in_channels": self.in_channels,
