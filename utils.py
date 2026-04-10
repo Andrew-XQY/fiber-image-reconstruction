@@ -33,7 +33,7 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
 
 def build_datasets(config: dict) -> dict:
     # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser", "clear_2022"]
-    dataset_sources = ["processed_chromox", "processed_chromox_laser"]  
+    dataset_sources = ["processed_chromox"]  
     dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
     db_rel = config["dataset_structure"]["db"].lstrip("/\\")
     db_paths = [d / db_rel for d in dataset_dirs]
@@ -41,12 +41,37 @@ def build_datasets(config: dict) -> dict:
     
     
     # multiple datasets (source).
+    # train_provider = SqlProvider(
+    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
+    # ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
+    # eval_provider = SqlProvider(
+    #     sources={"connection": db_paths[1], "sql": config["sql"]["chromox_laser"]}, output_config={'list': "image_path"}
+    # ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+    # # pad abs path to db saved relative dirs.
+    # for t in config["data"]["transforms"]["torch"]:
+    #     if t.get("name") == "add_parent_dir":
+    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+    #         break
+    # transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    # try:
+    #     for t in config["data"]["transforms"]["torch"]:
+    #         if t.get("name") == "add_parent_dir":
+    #             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
+    #             break
+    #     transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    # except Exception as e:
+    #     print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
+    #     transforms_2 = transforms_1
+        
+        
+        
+        
+    # single dataset (source).
     train_provider = SqlProvider(
         sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
     ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
-    eval_provider = SqlProvider(
-        sources={"connection": db_paths[1], "sql": config["sql"]["chromox_laser"]}, output_config={'list': "image_path"}
-    ).subsample(n_samples=config["data"]["total_val_samples"], seed=config["seed"])
+    train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
     # pad abs path to db saved relative dirs.
     for t in config["data"]["transforms"]["torch"]:
@@ -54,33 +79,11 @@ def build_datasets(config: dict) -> dict:
             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
             break
     transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    try:
-        for t in config["data"]["transforms"]["torch"]:
-            if t.get("name") == "add_parent_dir":
-                t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[1])
-                break
-        transforms_2 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    except Exception as e:
-        print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
-        transforms_2 = transforms_1
-        
-        
-        
-        
-    # single dataset (source).
-    # train_provider = SqlProvider(
-    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_random_scan"]}, output_config={'list': "image_path"}
-    # )
-    # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
-    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-    # # pad abs path to db saved relative dirs.
-    # for t in config["data"]["transforms"]["torch"]:
-    #     if t.get("name") == "add_parent_dir":
-    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
-    #         break
-    # transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    # # Pipeline that using data augmentation.
-    # # ========== SGM simulation pattern generator ==========
+    transforms_2 = transforms_1.copy() 
+    
+    
+    # With Pipeline that using data augmentation.
+    # ========== SGM simulation pattern generator ==========
     # canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
     # canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
     # canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
