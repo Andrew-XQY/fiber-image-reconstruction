@@ -29,9 +29,9 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
-#SBATCH --mem=32G
-#SBATCH --cpus-per-task=16
-#SBATCH --time=12:00:00
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=8
+#SBATCH --time=6:00:00
 
 set -euo pipefail
 module load apptainer
