@@ -14,7 +14,7 @@ venv/
 # Jupyter notebooks
 # *.ipynb
 .ipynb_checkpoints/
-notebooks/*
+# notebooks/*
 
 # IDE/editor
 .vscode/
