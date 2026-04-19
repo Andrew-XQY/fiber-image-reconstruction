@@ -144,6 +144,75 @@ sql:
       AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
       AND CAST(json_extract(camera_config, '$.speckle_camera_gain') AS INTEGER) = 0;
 
+  processed_chromox_cropped_line_scan: |
+    WITH ordered AS (
+        SELECT
+            image_id,
+            image_path,
+            ROW_NUMBER() OVER (ORDER BY CAST(image_id AS INTEGER) ASC) - 1 AS rn,
+            CAST(json_extract(REPLACE(ground_truth_stats, char(39), '"'), '$.sum') AS REAL) AS gt_sum
+        FROM mmf_dataset_metadata
+        WHERE purpose = 'real beam orthogonal acquisition'
+          AND comments = 'CLEAR beamtime; 10Hz repetition rate; 15 bunches; ND filter 3; '
+          AND is_saturated_ground_truth = 0
+          AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
+          AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
+          AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
+          AND CAST(json_extract(camera_config, '$.speckle_camera_gain') AS INTEGER) = 0
+    ),
+    candidates AS (
+        SELECT
+            image_id,
+            image_path,
+            rn,
+            CAST(rn / 5 AS INTEGER) AS grp_id,
+            (rn % 5) AS pos_in_grp,
+            gt_sum
+        FROM ordered
+        WHERE (rn % 5) IN (2, 3, 4)
+          AND gt_sum IS NOT NULL
+          AND gt_sum >= 36000
+    ),
+    paired AS (
+        SELECT *
+        FROM candidates
+        WHERE grp_id IN (
+            SELECT grp_id
+            FROM candidates
+            GROUP BY grp_id
+            HAVING COUNT(*) = 3
+        )
+    ),
+    winner AS (
+        SELECT
+            *,
+            ROW_NUMBER() OVER (
+                PARTITION BY grp_id
+                ORDER BY gt_sum DESC, pos_in_grp DESC
+            ) AS pick_rank
+        FROM paired
+    ),
+    final_sorted AS (
+        SELECT
+            image_id,
+            image_path,
+            gt_sum,
+            grp_id,
+            pos_in_grp,
+            ROW_NUMBER() OVER (ORDER BY CAST(image_id AS INTEGER) ASC) - 1 AS out_idx
+        FROM winner
+        WHERE pick_rank = 1
+    )
+    SELECT
+        image_id,
+        image_path,
+        gt_sum,
+        grp_id,
+        pos_in_grp
+    FROM final_sorted
+    WHERE out_idx % (0 + 1) = 0
+    ORDER BY CAST(image_id AS INTEGER) ASC;
+
 
 
 dataset_structure:
