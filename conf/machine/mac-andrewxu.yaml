@@ -16,3 +16,5 @@ paths:
     processed_chromox_laser: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Chromox_Laser"
     processed_yag_laser: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Yag_Laser"
 
+    processed_chromox_cropped: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Chromox_Cropped"
+

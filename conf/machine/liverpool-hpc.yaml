@@ -10,5 +10,6 @@ paths:
     processed_chromox_laser: "/workspace/dataset/CLEAR25_Chromox_Laser"
     processed_yag_laser: "/workspace/dataset/CLEAR25_Yag_Laser"
 
+
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"
 
