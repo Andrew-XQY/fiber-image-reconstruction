@@ -92,96 +92,25 @@ def build_datasets(config: dict) -> dict:
     # ====================================
     # Case 2 :single dataset (source).
     # ====================================
-    # train_provider = SqlProvider(
-    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_laser"]}, output_config={'list': "image_path"}
-    # ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
-    # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
-    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-    # # pad abs path to db saved relative dirs.
-    # for t in config["data"]["transforms"]["torch"]:
-    #     if t.get("name") == "add_parent_dir":
-    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
-    #         break
-    # transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    # transforms_2 = transforms_1.copy() 
-    # train_dataset = PyTorchPipeline(
-    #     train_provider,
-    #     transforms_1
-    # ).to_memory_dataset(config["data"]["dataset_ops"])
-    # val_dataset = PyTorchPipeline(
-    #     val_provider,
-    #     transforms_2
-    # ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
-    # test_dataset = PyTorchPipeline(
-    #     test_provider,
-    #     transforms_2
-    # ).to_memory_dataset(config["data"]["dataset_ops"])
-    
-    
-    
-    
-    # ====================================
-    # Case 3 :With Pipeline that using data augmentation.
-    # ====================================
-    # ========== SGM simulation pattern generator ==========
-    def build_sgm_stream(cfg):
-        canvas = pattern_gen.DynamicPatterns(*cfg["simulation"]["canvas_size"])
-        canvas.set_postprocess_fns(
-            build_transforms_from_config(cfg["simulation"]["process_functions"])
-        )
-        canvas._distributions = [
-            pattern_gen.StaticGaussianDistribution(canvas)
-            for _ in range(cfg["simulation"]["total_Guassian_num"])
-        ]
-        canvas.set_threshold(cfg["simulation"]["minimum_pixel_threshold"])
-        return canvas.pattern_stream(
-            std_1=cfg["simulation"]["std_1"],
-            std_2=cfg["simulation"]["std_2"],
-            max_intensity=cfg["simulation"]["max_intensity"],
-            fade_rate=cfg["simulation"]["fade_rate"],
-            distribution=cfg["simulation"]["distribution"],
-        )
-        
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_line_scan"]},
-        output_config={"list": "image_path"},
-    )
-    
+        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_train"]}, output_config={'list': "image_path"}
+    )#.subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
     eval_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_eval"]},
-        output_config={"list": "image_path"},
-    )
+        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_eval"]}, output_config={'list': "image_path"}
+    )#.subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
+    # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-
+    # pad abs path to db saved relative dirs.
     for t in config["data"]["transforms"]["torch"]:
         if t.get("name") == "add_parent_dir":
             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
             break
-    full_transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    transforms_2 = full_transforms.copy()  # for val/test
-    
-    combinator = SpatialNearestCombinator(
-        pattern_provider=build_sgm_stream(config),
-        skip_zero=True,
-        eps=1e-8,
-        jitter_mode="global_cell",
-        jitter_alpha=1.0,
-        transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
-    )
-
-    train_dataset = CachedBasisPipeline(
+    transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    transforms_2 = transforms_1.copy() 
+    train_dataset = PyTorchPipeline(
         train_provider,
-        combinator=combinator,
-        transforms=full_transforms,
-        basis_position_extractor=make_centroid_position_extractor(
-            method="first_moment",
-            component=1,
-        ),
-        num_samples=config["data"]["total_train_samples"],
-        seed=config["seed"],
-        eager=True,
-    ).to_framework_dataset(dataset_ops = config["data"]["dataset_ops"])
-    
+        transforms_1
+    ).to_memory_dataset(config["data"]["dataset_ops"])
     val_dataset = PyTorchPipeline(
         val_provider,
         transforms_2
@@ -190,6 +119,83 @@ def build_datasets(config: dict) -> dict:
         test_provider,
         transforms_2
     ).to_memory_dataset(config["data"]["dataset_ops"])
+    
+    
+    
+    
+    # ====================================
+    # Case 3 :With Pipeline that using data augmentation.
+    # ====================================
+    # ========== SGM simulation pattern generator ==========
+    # def build_sgm_stream(cfg):
+    #     canvas = pattern_gen.DynamicPatterns(*cfg["simulation"]["canvas_size"])
+    #     canvas.set_postprocess_fns(
+    #         build_transforms_from_config(cfg["simulation"]["process_functions"])
+    #     )
+    #     canvas._distributions = [
+    #         pattern_gen.StaticGaussianDistribution(canvas)
+    #         for _ in range(cfg["simulation"]["total_Guassian_num"])
+    #     ]
+    #     canvas.set_threshold(cfg["simulation"]["minimum_pixel_threshold"])
+    #     return canvas.pattern_stream(
+    #         std_1=cfg["simulation"]["std_1"],
+    #         std_2=cfg["simulation"]["std_2"],
+    #         max_intensity=cfg["simulation"]["max_intensity"],
+    #         fade_rate=cfg["simulation"]["fade_rate"],
+    #         distribution=cfg["simulation"]["distribution"],
+    #     )
+        
+    # train_provider = SqlProvider(
+    #     sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_line_scan"]},
+    #     output_config={"list": "image_path"},
+    # )
+    
+    # eval_provider = SqlProvider(
+    #     sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_eval"]},
+    #     output_config={"list": "image_path"},
+    # )
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+
+    # for t in config["data"]["transforms"]["torch"]:
+    #     if t.get("name") == "add_parent_dir":
+    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+    #         break
+    # full_transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    # transforms_2 = full_transforms.copy()  # for val/test
+    
+    # combinator = SpatialNearestCombinator(
+    #     pattern_provider=build_sgm_stream(config),
+    #     skip_zero=True,
+    #     eps=1e-8,
+    #     jitter_mode="global_cell",
+    #     jitter_alpha=1.0,
+    #     transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
+    # )
+
+    # train_dataset = CachedBasisPipeline(
+    #     train_provider,
+    #     combinator=combinator,
+    #     transforms=full_transforms,
+    #     basis_position_extractor=make_centroid_position_extractor(
+    #         method="first_moment",
+    #         component=1,
+    #     ),
+    #     num_samples=config["data"]["total_train_samples"],
+    #     seed=config["seed"],
+    #     eager=True,
+    # ).to_framework_dataset(dataset_ops = config["data"]["dataset_ops"])
+    
+    # val_dataset = PyTorchPipeline(
+    #     val_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+    # test_dataset = PyTorchPipeline(
+    #     test_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+
+
+
 
 
 
