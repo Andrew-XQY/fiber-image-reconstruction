@@ -13,6 +13,9 @@
 # Submit and running the job:
 #   sbatch submit.sh
 #
+# DOS UNIX string convert (if needed):
+#   dos2unix submit.sh
+#
 # Quick GPU test (optional):
 #   apptainer exec --nv ~/torch_2.5_py312.sif python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.version.cuda)"
 #

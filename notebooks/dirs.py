@@ -66,15 +66,12 @@ if any(win in machine for win in ["win", "windows"]): # windows
         },
         
         "models": {
-            "chromox_vae_base_model": "C:/Users/qiyuanxu/Desktop/Scope 1 cross field/Model_trained_on_CHROMOX_only/model.pt",
-            "chromox_laser_vae_base_model": "C:/Users/qiyuanxu/Desktop/Scope 1 cross field/Model_trained_on_CHROMOX_LASER_only/model.pt",
-            "yag_vae_base_model": "C:/Users/qiyuanxu/Desktop/Scope 1 cross field/Model_trained_on_YAG_only/model.pt"
+            "chromox_vae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/CLEAR25-20260421121234/model.pt",
         },
         
         "save": {
             "model_inference": {
-                "chromox_vae_base_model": "C:/Users/qiyuanxu/Desktop/Scope 1 cross field/Model_trained_on_CHROMOX_only/inference/",
-                "chromox_laser_vae_base_model": "C:/Users/qiyuanxu/Desktop/Scope 1 cross field/Model_trained_on_CHROMOX_LASER_only/inference/",
+                "chromox_vae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/CLEAR25-20260421121234/inference/",
                 },
         }
             
