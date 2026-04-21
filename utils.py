@@ -1,12 +1,21 @@
+import cv2
 import sys
 import torch
 import torchvision.utils as vutils
 import math
 import numpy as np
 from pathlib import Path
+from copy import deepcopy
 from xflow import SqlProvider, FileProvider, PyTorchPipeline, instantiate, show_model_info, TransformRegistry as T
 from xflow.data import build_transforms_from_config
 from xflow.utils import resolve_resource_dir
+
+from xflow.extensions.physics.pipeline import (
+    CachedBasisPipeline,
+    SpatialNearestCombinator,
+    make_centroid_position_extractor,
+)
+from xflow.extensions.physics import pattern_gen
 
 SAMPLE_FLATTENED = ['SHL_DNN']
 REGRESSION = ['ERN'] # Encoder-regressor
@@ -32,15 +41,16 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
 
 
 def build_datasets(config: dict) -> dict:
-    # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser", "clear_2022"]
-    dataset_sources = ["processed_chromox_laser"]  
+    # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser", "clear_2022", "processed_chromox_cropped"]
+    dataset_sources = ["processed_chromox_cropped"]  
     dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
     db_rel = config["dataset_structure"]["db"].lstrip("/\\")
     db_paths = [d / db_rel for d in dataset_dirs]
     
     
-    
-    # multiple datasets (source).
+    # ====================================
+    # Case 1 :multiple datasets (source). 
+    # ====================================
     # train_provider = SqlProvider(
     #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_all"]}, output_config={'list': "image_path"}
     # ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
@@ -63,72 +73,115 @@ def build_datasets(config: dict) -> dict:
     # except Exception as e:
     #     print("[WARNING] Failed to build transforms_2 with second dataset, falling back to transforms_1:", e)
     #     transforms_2 = transforms_1
+    # train_dataset = PyTorchPipeline(
+    #     train_provider,
+    #     transforms_1
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+    # val_dataset = PyTorchPipeline(
+    #     val_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+    # test_dataset = PyTorchPipeline(
+    #     test_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
         
         
         
         
-    # single dataset (source).
+    # ====================================
+    # Case 2 :single dataset (source).
+    # ====================================
+    # train_provider = SqlProvider(
+    #     sources={"connection": db_paths[0], "sql": config["sql"]["chromox_laser"]}, output_config={'list': "image_path"}
+    # ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
+    # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+    # # pad abs path to db saved relative dirs.
+    # for t in config["data"]["transforms"]["torch"]:
+    #     if t.get("name") == "add_parent_dir":
+    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+    #         break
+    # transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    # transforms_2 = transforms_1.copy() 
+    # train_dataset = PyTorchPipeline(
+    #     train_provider,
+    #     transforms_1
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+    # val_dataset = PyTorchPipeline(
+    #     val_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+    # test_dataset = PyTorchPipeline(
+    #     test_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+    
+    
+    
+    
+    # ====================================
+    # Case 3 :With Pipeline that using data augmentation.
+    # ====================================
+    # ========== SGM simulation pattern generator ==========
+    def build_sgm_stream(cfg):
+        canvas = pattern_gen.DynamicPatterns(*cfg["simulation"]["canvas_size"])
+        canvas.set_postprocess_fns(
+            build_transforms_from_config(cfg["simulation"]["process_functions"])
+        )
+        canvas._distributions = [
+            pattern_gen.StaticGaussianDistribution(canvas)
+            for _ in range(cfg["simulation"]["total_Guassian_num"])
+        ]
+        canvas.set_threshold(cfg["simulation"]["minimum_pixel_threshold"])
+        return canvas.pattern_stream(
+            std_1=cfg["simulation"]["std_1"],
+            std_2=cfg["simulation"]["std_2"],
+            max_intensity=cfg["simulation"]["max_intensity"],
+            fade_rate=cfg["simulation"]["fade_rate"],
+            distribution=cfg["simulation"]["distribution"],
+        )
+        
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["chromox_laser"]}, output_config={'list': "image_path"}
-    ).subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
-    train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
+        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_line_scan"]},
+        output_config={"list": "image_path"},
+    )
+    
+    eval_provider = SqlProvider(
+        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_eval"]},
+        output_config={"list": "image_path"},
+    )
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-    # pad abs path to db saved relative dirs.
+
     for t in config["data"]["transforms"]["torch"]:
         if t.get("name") == "add_parent_dir":
             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
             break
-    transforms_1 = build_transforms_from_config(config["data"]["transforms"]["torch"])
-    transforms_2 = transforms_1.copy() 
+    full_transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    transforms_2 = full_transforms.copy()  # for val/test
     
-    
-    # With Pipeline that using data augmentation.
-    # ========== SGM simulation pattern generator ==========
-    # canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
-    # canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
-    # canvas._distributions = [pattern_gen.StaticGaussianDistribution(canvas) for _ in range(config["simulation"]["total_Guassian_num"])]
-    # canvas.set_threshold(config["simulation"]["minimum_pixel_threshold"])
-    # stream = canvas.pattern_stream(
-    #     std_1=config["simulation"]["std_1"],
-    #     std_2=config["simulation"]["std_2"],
-    #     max_intensity=config["simulation"]["max_intensity"],
-    #     fade_rate=config["simulation"]["fade_rate"],
-    #     distribution=config["simulation"]["distribution"]
-    # )
-    # # ======== combinator using index + SGM ========
-    # combinator = IndexCombinator(
-    #     pattern_provider=stream,
-    #     transforms= build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
-    # )
-    # train_dataset = CachedBasisPipeline(
-    #     train_provider,
-    #     combinator=combinator,
-    #     transforms=transforms,
-    #     num_samples=config["data"]["total_train_samples"],
-    #     seed=config["seed"],
-    #     eager=True
-    # ).to_framework_dataset(framework=config["framework"], dataset_ops=config["data"]["dataset_ops"])
+    combinator = SpatialNearestCombinator(
+        pattern_provider=build_sgm_stream(config),
+        skip_zero=True,
+        eps=1e-8,
+        jitter_mode="global_cell",
+        jitter_alpha=1.0,
+        transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
+    )
 
-
-
-    # direct file loading pattern 
-    # folder_1 = dataset_sources[0]
-    # train = FileProvider(root_paths=config["paths"][folder_1])
-    # train_provider, eval_provider = train.split(config["data"]["train_val_split"], seed=config["seed"])
-    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
-    # transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])[1:] # direct file do not need abs root.
-    # transforms.insert(2, T.get("torch_to_grayscale")) 
-    # transforms_1 = transforms.copy()
-    # transforms_2 = transforms.copy()
-    
-    
-    
-    
-    # normally leave the pipelines decoupled and untouched so the output interface remains consistent.
-    train_dataset = PyTorchPipeline(
+    train_dataset = CachedBasisPipeline(
         train_provider,
-        transforms_1
-    ).to_memory_dataset(config["data"]["dataset_ops"])
+        combinator=combinator,
+        transforms=full_transforms,
+        basis_position_extractor=make_centroid_position_extractor(
+            method="first_moment",
+            component=1,
+        ),
+        num_samples=config["data"]["total_train_samples"],
+        seed=config["seed"],
+        eager=True,
+    ).to_framework_dataset(dataset_ops = config["data"]["dataset_ops"])
+    
     val_dataset = PyTorchPipeline(
         val_provider,
         transforms_2
@@ -137,6 +190,39 @@ def build_datasets(config: dict) -> dict:
         test_provider,
         transforms_2
     ).to_memory_dataset(config["data"]["dataset_ops"])
+
+
+
+
+    # ====================================
+    # Case 4 :direct file loading pattern 
+    # ====================================
+    # folder_1 = dataset_sources[0]
+    # train = FileProvider(root_paths=config["paths"][folder_1])
+    # train_provider, eval_provider = train.split(config["data"]["train_val_split"], seed=config["seed"])
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"], seed=config["seed"])
+    # transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])[1:] # direct file do not need abs root.
+    # transforms.insert(2, T.get("torch_to_grayscale")) 
+    # transforms_1 = transforms.copy()
+    # transforms_2 = transforms.copy()
+    # train_dataset = PyTorchPipeline(
+    #     train_provider,
+    #     transforms_1
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+    # val_dataset = PyTorchPipeline(
+    #     val_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])   # testset data do not need thresholding since it is to remove stacking noise?
+    # test_dataset = PyTorchPipeline(
+    #     test_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+    
+    
+    
+    
+
+    
     return {
         "train_provider": train_provider,
         "val_provider": val_provider,

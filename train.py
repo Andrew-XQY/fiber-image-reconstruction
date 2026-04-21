@@ -1,13 +1,14 @@
 # pip install xflow-py
-from xflow import ConfigManager, build_model_report
-from xflow.utils import save_image
-
-import torch
+import cv2
 from pathlib import Path
 from datetime import datetime  
 from functools import partial
 from config_utils import load_config, detect_machine
 from utils import *
+
+from xflow import ConfigManager, build_model_report
+from xflow.utils import save_image
+import torch
 
 def main():
     # Future CLI parameters
@@ -54,8 +55,8 @@ def main():
         for left_parts, params, right_parts in test_dataset:
             print("Sample types: ", type(left_parts[0]))
             print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
-            save_image(left_parts[0], config["paths"]["output"] + "/input.png")
-            save_image(right_parts[0], config["paths"]["output"] + "/output.png")
+            save_image(left_parts[0], config["paths"]["output"] + "/test_dataset_input.png")
+            save_image(right_parts[0], config["paths"]["output"] + "/test_dataset_output.png")
             break
     else:
         for left_parts, right_parts in test_dataset:
@@ -63,11 +64,11 @@ def main():
             print("Sample types: ", type(left_parts[0]))
             print(f"Batch shapes: {left_parts.shape}, {right_parts.shape}")
             if model_name in SAMPLE_FLATTENED:
-                save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/input.png")
-                save_image(right_parts[0].reshape(config['data']['output_shape']), config["paths"]["output"] + "/output.png")
+                save_image(left_parts[0].reshape(config['data']['input_shape']), config["paths"]["output"] + "/test_dataset_input.png")
+                save_image(right_parts[0].reshape(config['data']['output_shape']), config["paths"]["output"] + "/test_dataset_output.png")
             else:
-                save_image(left_parts[0], config["paths"]["output"] + "/input.png")
-                save_image(right_parts[0], config["paths"]["output"] + "/output.png")
+                save_image(left_parts[0], config["paths"]["output"] + "/test_dataset_input.png")
+                save_image(right_parts[0], config["paths"]["output"] + "/test_dataset_output.png")
             break
 
     # ========================================

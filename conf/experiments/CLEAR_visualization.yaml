@@ -39,21 +39,6 @@ model:
   apply_dropout:    [1,   1,   0,   0,   0,   0  ]
   final_activation: sigmoid
 
-simulation:
-  canvas_size: [256, 256]                                                  
-  total_Guassian_num: 100                       # SGM total number of Guassian components
-  max_intensity: 100                                  # Max intensity for each Guassian component
-  minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
-  fade_rate: 0.98                               # Controls how many active Guassian compoents in a probablistic way
-  std_1: 0.015                                  # Guassian std lower bound
-  std_2: 0.08                                   # Guassian std upper bound
-  distribution: "other" 
-  process_functions:                           # before the 
-    - name: "remap_range"                      # Normalize pixel values to [0,1]
-    - name: "resize"                           # Resize to match input dimensions
-      params:
-        size: [32, 32]                         # convient for next step (orthognal basis) to decompose the image.
-        interpolation: "bilinear"
 
 sql:
   chromox_all: |
@@ -215,6 +200,8 @@ sql:
 
 
 
+
+
 dataset_structure:
   db: "/db/dataset_meta.db"                     # Path to the SQLite database containing dataset metadata
 
@@ -235,24 +222,75 @@ data:
       - name: "torch_split_width"               # Split image into left/right halves on width
         params:
           swap: True       
-      - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
-        params:
-          transforms:
-            - name: "identity"                  # Fiber output   
-            - name: "identity" 
+      # - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
+      #   params:
+      #     transforms:
+      #       - name: "identity"                  # Fiber output   
+      #       - name: "torch_threshold"           # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
+      #         params:
+      #           threshold: 0.098                # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.   0.098
+      #           threshold_value: 0.0
+      #           threshold_mode: "below"   
+      # - name: "multi_transform"                 # normalized the orthogonal basis (but exclude on the val/test set)
+      #   params:
+      #     transforms:
+      #       - name: "identity"  
+      #       - name: "torch_threshold"           # Ground truth, but should we clip the background noise? since this change the source of truth mapping relation?
+      #         params:
+      #           threshold: 0.95                  # cut off background pixel level to avoid superposition stakcing noise. But not sure if this change the data.   0.098
+      #           threshold_value: 0.0
+      #           threshold_mode: "above"   
+
+
+simulation:
+  canvas_size: [256, 256]                                                  
+  total_Guassian_num: 5                        # SGM total number of Guassian components
+  max_intensity: 1                             # Max intensity for each Guassian component
+  minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
+  fade_rate: 0.5                                # Controls how many active Guassian compoents in a probablistic way
+  std_1: 0.015                                  # Guassian std lower bound
+  std_2: 0.03                                   # Guassian std upper bound
+  distribution: "other" 
+  process_functions:                           # before the 
+    - name: "remap_range"                      # Normalize pixel values to [0,1]
+    - name: "resize"                           # Resize to match input dimensions
+      params:
+        size: [23, 23]                         # convient for next step (orthognal basis) to decompose the image.
+        interpolation: "bilinear"
+
+
 
 combinator:
-  transforms:                               # this is for the output from data augmentation using basis
+  transforms:
     torch:
-      - name: "multi_transform"                
+      # - name: "multi_transform"
+      #   params:
+      #     transforms:
+      #       - name: "torch_to_tensor"
+      #       - name: "torch_to_tensor"
+
+      # - name: "multi_transform"
+      #   params:
+      #     transforms:
+      #       - name: "torch_debug_shape"
+      #         params: {label: "left", show_stats: true}
+      #       - name: "torch_debug_shape"
+      #         params: {label: "right", show_stats: true}
+
+      # - name: "multi_transform"
+      #   params:
+      #     transforms:
+      #       - name: "identity"
+      #       - name: "torch_threshold"
+      #         params:
+      #           threshold: 1.8
+      #           threshold_value: 0.0
+      #           threshold_mode: "above"
+
+      - name: "multi_transform"
         params:
           transforms:
-            - name: "torch_clip_range"   
-              params:
-                clip_min: 0
-                clip_max: 1
-            - name: "torch_clip_range"        
-              params:
-                clip_min: 0
-                clip_max: 1
-                
+            - name: "torch_clip_range"
+              params: {clip_min: 0, clip_max: 1}
+            - name: "torch_clip_range"
+              params: {clip_min: 0, clip_max: 1}
