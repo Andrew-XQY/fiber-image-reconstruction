@@ -234,6 +234,96 @@ sql:
     ORDER BY grp_id, pos_in_grp;
 
 
+  processed_chromox_random_scan_train: |
+    WITH ordered AS (
+        SELECT
+            image_path,
+            ROW_NUMBER() OVER (ORDER BY image_path) - 1 AS rn,
+            CAST(json_extract(REPLACE(ground_truth_stats, char(39), '"'), '$.sum') AS REAL) AS gt_sum
+        FROM mmf_dataset_metadata
+        WHERE purpose = 'testset'
+          AND is_saturated_ground_truth = 0
+          AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
+          AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
+          AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
+          AND CAST(json_extract(camera_config, '$.speckle_camera_gain') AS INTEGER) = 0
+    ),
+    selected AS (
+        SELECT
+            image_path,
+            gt_sum,
+            CAST(rn / 5 AS INTEGER) AS grp_id,
+            (rn % 5) AS pos_in_grp
+        FROM ordered
+        WHERE (rn % 5) IN (4)
+    ),
+    shuffled AS (
+        SELECT
+            image_path,
+            gt_sum,
+            grp_id,
+            pos_in_grp,
+            NTILE(5) OVER (
+                ORDER BY ((grp_id * 1103515245 + 12345) % 2147483647), image_path
+            ) AS fold_id
+        FROM selected
+    )
+    SELECT
+        image_path,
+        gt_sum,
+        grp_id,
+        pos_in_grp
+    FROM shuffled
+    WHERE fold_id <> 1
+    ORDER BY grp_id, pos_in_grp;
+
+
+  processed_chromox_random_scan_eval: |
+    WITH ordered AS (
+        SELECT
+            image_path,
+            ROW_NUMBER() OVER (ORDER BY image_path) - 1 AS rn,
+            CAST(json_extract(REPLACE(ground_truth_stats, char(39), '"'), '$.sum') AS REAL) AS gt_sum
+        FROM mmf_dataset_metadata
+        WHERE purpose = 'testset'
+          AND is_saturated_ground_truth = 0
+          AND CAST(json_extract(camera_config, '$.ground_truth_camera_exposure') AS REAL) = 195000
+          AND CAST(json_extract(camera_config, '$.ground_truth_camera_gain') AS INTEGER) = 0
+          AND CAST(json_extract(camera_config, '$.speckle_camera_exposure') AS REAL) = 195000
+          AND CAST(json_extract(camera_config, '$.speckle_camera_gain') AS INTEGER) = 0
+    ),
+    selected AS (
+        SELECT
+            image_path,
+            gt_sum,
+            CAST(rn / 5 AS INTEGER) AS grp_id,
+            (rn % 5) AS pos_in_grp
+        FROM ordered
+        WHERE (rn % 5) IN (4)
+    ),
+    shuffled AS (
+        SELECT
+            image_path,
+            gt_sum,
+            grp_id,
+            pos_in_grp,
+            NTILE(5) OVER (
+                ORDER BY ((grp_id * 1103515245 + 12345) % 2147483647), image_path
+            ) AS fold_id
+        FROM selected
+    )
+    SELECT
+        image_path,
+        gt_sum,
+        grp_id,
+        pos_in_grp
+    FROM shuffled
+    WHERE fold_id = 1
+    ORDER BY grp_id, pos_in_grp;
+
+
+
+
 
 # simulation:
 #   canvas_size: [256, 256]                                                  
