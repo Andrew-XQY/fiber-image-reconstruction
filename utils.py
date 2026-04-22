@@ -42,7 +42,7 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
 
 def build_datasets(config: dict) -> dict:
     # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser", "clear_2022", "processed_chromox_cropped"]
-    dataset_sources = ["processed_chromox"]  
+    dataset_sources = ["processed_chromox_cropped"]  
     dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
     db_rel = config["dataset_structure"]["db"].lstrip("/\\")
     db_paths = [d / db_rel for d in dataset_dirs]
@@ -93,10 +93,10 @@ def build_datasets(config: dict) -> dict:
     # Case 2 :single dataset (source).
     # ====================================
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_random_scan_train"]}, output_config={'list': "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_train"]}, output_config={'list': "image_path"}
     )#.subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
     eval_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_random_scan_eval"]}, output_config={'list': "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_eval"]}, output_config={'list': "image_path"}
     )#.subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
     # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
