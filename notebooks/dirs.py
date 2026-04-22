@@ -66,12 +66,17 @@ if any(win in machine for win in ["win", "windows"]): # windows
         },
         
         "models": {
-            "chromox_vae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/CLEAR25-20260421121234/model.pt",
+            "root": "C:/Users/qiyuanxu/Desktop/Models/",
+            "chromox_cropped_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_sgm/model.pt",
+            "chromox_cropped_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan/model.pt",
+            "chromox_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cae_random_scan/model.pt",
         },
         
         "save": {
             "model_inference": {
-                "chromox_vae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/CLEAR25-20260421121234/inference/",
+                "chromox_cropped_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_sgm/inference/",
+                "chromox_cropped_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan/inference/",
+                "chromox_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cae_random_scan/inference/",
                 },
         }
             

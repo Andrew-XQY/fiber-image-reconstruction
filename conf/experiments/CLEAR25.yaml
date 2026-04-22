@@ -186,7 +186,7 @@ sql:
             CAST(rn / 5 AS INTEGER) AS grp_id,
             (rn % 5) AS pos_in_grp
         FROM ordered
-        WHERE (rn % 5) IN (1, 4)
+        WHERE (rn % 5) IN (4)
           AND gt_sum IS NOT NULL
           AND gt_sum >= 36000
     )
@@ -218,7 +218,7 @@ sql:
             (rn % 5) AS pos_in_grp,
             ROW_NUMBER() OVER (ORDER BY image_path) AS srn
         FROM ordered
-        WHERE (rn % 5) IN (1, 4)
+        WHERE (rn % 5) IN (4)
           AND gt_sum IS NOT NULL
           AND gt_sum >= 36000
     ),
