@@ -18,6 +18,7 @@ paths:
   clear_chromox_saturday: ${paths.datasets.clear_chromox_saturday}
   processed_pure_dmd: ${paths.datasets.processed_pure_dmd}
   clear_2022: ${paths.datasets.clear_2022}
+  2025-11-06: ${paths.datasets.2025-11-06}
 
   processed_dmd: ${paths.datasets.processed_dmd}
   processed_chromox: ${paths.datasets.processed_chromox}
@@ -42,6 +43,18 @@ model:
 
 
 sql:
+  2025-11-06_train: |
+    SELECT image_path
+        FROM mmf_dataset_metadata
+        WHERE batch IN (2)
+        ORDER BY image_path
+
+  2025-11-06_eval: |
+    SELECT image_path
+        FROM mmf_dataset_metadata
+        WHERE batch IN (6)
+        AND comments is NULL
+
   chromox_all: |
     SELECT image_path
     FROM mmf_dataset_metadata
@@ -341,21 +354,42 @@ sql:
 #         size: [25, 25]                         # convient for next step (orthognal basis) to decompose the image.
 #         interpolation: "bilinear"
 
+# simulation:
+#   canvas_size: [256, 256]                                                  
+#   total_Guassian_num: 5                        # SGM total number of Guassian components
+#   max_intensity: 1                             # Max intensity for each Guassian component
+#   minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
+#   fade_rate: 0.5                                # Controls how many active Guassian compoents in a probablistic way
+#   std_1: 0.015                                  # Guassian std lower bound
+#   std_2: 0.03                                   # Guassian std upper bound
+#   distribution: "other" 
+#   process_functions:                           # before the 
+#     - name: "remap_range"                      # Normalize pixel values to [0,1]
+#     - name: "resize"                           # Resize to match input dimensions
+#       params:
+#         size: [23, 23]                         # convient for next step (orthognal basis) to decompose the image.
+#         interpolation: "bilinear"
+
 simulation:
-  canvas_size: [256, 256]                                                  
-  total_Guassian_num: 5                        # SGM total number of Guassian components
-  max_intensity: 1                             # Max intensity for each Guassian component
-  minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
-  fade_rate: 0.5                                # Controls how many active Guassian compoents in a probablistic way
-  std_1: 0.015                                  # Guassian std lower bound
-  std_2: 0.03                                   # Guassian std upper bound
-  distribution: "other" 
-  process_functions:                           # before the 
-    - name: "remap_range"                      # Normalize pixel values to [0,1]
-    - name: "resize"                           # Resize to match input dimensions
-      params:
-        size: [23, 23]                         # convient for next step (orthognal basis) to decompose the image.
-        interpolation: "bilinear"
+  canvas_size:
+  - 256
+  - 256
+  total_Guassian_num: 100
+  max_intensity: 100
+  minimum_pixel_threshold: 5.0
+  fade_rate: 0.97
+  std_1: 0.015
+  std_2: 0.08
+  distribution: other
+  process_functions:
+  - name: remap_range
+  - name: resize
+    params:
+      size:
+      - 32
+      - 32
+      interpolation: bilinear
+
 
 
 
@@ -409,6 +443,68 @@ data:
         prefetch_factor: 2                      # Number of batches to prefetch
         seed: *seed                             # Random seed for reproducibility
 
+
+lab_data:                   
+  transforms:                                   # CERN optical lab used training setup, scale_factor specifically tuned based on the cameras params
+    torch:
+      - name: "add_parent_dir"                  
+        params: 
+          parent_dir: null                      # This should be the directory where the images are stored after extraction
+      - name: torch_load_image
+      - name: torch_to_tensor
+      - name: torch_remap_range
+      - name: torch_split_width
+        params:
+          swap: true
+      - name: multi_transform
+        params:
+          transforms:
+          - name: torch_scale
+            params:
+              scale_factor: 0.159
+          - name: identity
+
+
+inference:                                      # carry meta information of each sample for hooks use during inference, other processing follows exactly the same as training
+  transforms:
+    torch:
+    - name: "split_copies"                      # Duplicate and distribute the input into multiple copies for parallel downstream application
+      params:
+        num_copies: 2                        
+    - name: "multi_transform"                
+      params:
+        transforms:
+          - name: "add_parent_dir"   
+            params:
+              parent_dir: null  
+          - name: "extract_filename"            # One more signal line to pass through the potential sample meta data and expose to hooks.
+            params:
+              with_extension: True
+    - name: "multi_transform"                
+      params:
+        transforms:
+          - name: "torch_load_image"   
+          - name: "identity"        
+    - name: "multi_transform"                
+      params:
+        transforms:
+          - name: "torch_to_tensor"   
+          - name: "identity"        
+    - name: "multi_transform"                
+      params:
+        transforms:
+          - name: "torch_remap_range"   
+          - name: "identity"        
+    - name: "multi_transform"                
+      params:
+        transforms:
+          - name: "torch_split_width"   
+            params:
+              swap: True
+          - name: "identity"        
+
+
+
 combinator:
   transforms:                                   # this is for the output from data augmentation using basis
     torch:
@@ -423,5 +519,7 @@ combinator:
               params:
                 clip_min: 0
                 clip_max: 1
+                
+
                 
 extra_files: ["models/CAE.py"]

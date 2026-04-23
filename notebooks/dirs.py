@@ -69,6 +69,7 @@ if any(win in machine for win in ["win", "windows"]): # windows
             "root": "C:/Users/qiyuanxu/Desktop/Models/",
             "chromox_cropped_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_sgm/model.pt",
             "chromox_cropped_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan/model.pt",
+            "chromox_cropped_cae_random_scan_leakless": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan_leakless/model.pt",
             "chromox_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cae_random_scan/model.pt",
         },
         
@@ -76,6 +77,7 @@ if any(win in machine for win in ["win", "windows"]): # windows
             "model_inference": {
                 "chromox_cropped_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_sgm/inference/",
                 "chromox_cropped_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan/inference/",
+                "chromox_cropped_cae_random_scan_leakless": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan_leakless/inference/",
                 "chromox_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cae_random_scan/inference/",
                 },
         }

@@ -2,7 +2,7 @@
 paths:
   datasets:
     clear_2022: "/workspace/dataset/MMF"
-    cern_lab_20251106: "/workspace/dataset/2025-11-06"
+    2025-11-06: "/workspace/dataset/2025-11-06"
 
     processed_dmd: "/workspace/dataset/CLEAR25_DMD"
     processed_chromox: "/workspace/dataset/CLEAR25_Chromox"
