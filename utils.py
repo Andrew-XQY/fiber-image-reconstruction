@@ -202,14 +202,12 @@ def build_datasets(config: dict) -> dict:
     eval_provider = SqlProvider(
         sources={"connection": db_paths[0], "sql": config["sql"]["clear_dmd_eval"]}, output_config={"list": "image_path"}
     )
-
     which_transforms = "data"   # change transform source as needed.  data; lab_data
     for t in config[which_transforms]["transforms"]["torch"]:
         if t.get("name") == "add_parent_dir":
             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
             break
     transforms = build_transforms_from_config(config[which_transforms]["transforms"]["torch"])  
-
     canvas = pattern_gen.DynamicPatterns(*config["simulation"]["canvas_size"])
     canvas.set_postprocess_fns(build_transforms_from_config(config["simulation"]["process_functions"]))
     canvas._distributions = [
