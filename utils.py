@@ -43,7 +43,7 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
 
 def build_datasets(config: dict) -> dict:
     # ["processed_dmd", "processed_chromox", "processed_yag", "processed_chromox_laser", "processed_yag_laser", "clear_2022", "processed_chromox_cropped", "2025-11-06"]
-    dataset_sources = ["2025-11-06"]  
+    dataset_sources = ["processed_dmd"]  
     dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
     db_rel = config["dataset_structure"]["db"].lstrip("/\\")
     db_paths = [d / db_rel for d in dataset_dirs]
@@ -125,7 +125,7 @@ def build_datasets(config: dict) -> dict:
     
     
     # ====================================
-    # Case 3 :With Pipeline that using data augmentation. Nearest neighbor based combinator.
+    # Case 3 :With Pipeline that using data augmentation. Nearest neighbor based combinator + SGM
     # ====================================
     # ========== SGM simulation pattern generator ==========
     # def build_sgm_stream(cfg):
@@ -145,25 +145,21 @@ def build_datasets(config: dict) -> dict:
     #         fade_rate=cfg["simulation"]["fade_rate"],
     #         distribution=cfg["simulation"]["distribution"],
     #     )
-        
     # train_provider = SqlProvider(
     #     sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_line_scan"]},
     #     output_config={"list": "image_path"},
     # )
-    
     # eval_provider = SqlProvider(
     #     sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_eval"]},
     #     output_config={"list": "image_path"},
     # )
     # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
-
     # for t in config["data"]["transforms"]["torch"]:
     #     if t.get("name") == "add_parent_dir":
     #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
     #         break
     # full_transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
     # transforms_2 = full_transforms.copy()  # for val/test
-    
     # combinator = SpatialNearestCombinator(
     #     pattern_provider=build_sgm_stream(config),
     #     skip_zero=True,
@@ -172,7 +168,6 @@ def build_datasets(config: dict) -> dict:
     #     jitter_alpha=1.0,
     #     transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
     # )
-
     # train_dataset = CachedBasisPipeline(
     #     train_provider,
     #     combinator=combinator,
@@ -185,7 +180,6 @@ def build_datasets(config: dict) -> dict:
     #     seed=config["seed"],
     #     eager=True,
     # ).to_framework_dataset(dataset_ops = config["data"]["dataset_ops"])
-    
     # val_dataset = PyTorchPipeline(
     #     val_provider,
     #     transforms_2
@@ -198,18 +192,18 @@ def build_datasets(config: dict) -> dict:
 
 
 
+
     # ====================================
     # Case 3-a :With Pipeline that using data augmentation. Index-based combinator.
     # ====================================
-    # ========== SGM simulation pattern generator ==========
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["2025-11-06_train"]}, output_config={"list": "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"]["clear_dmd_position_basis"]}, output_config={"list": "image_path"}
     )
     eval_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["2025-11-06_eval"]}, output_config={"list": "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"]["clear_dmd_eval"]}, output_config={"list": "image_path"}
     )
 
-    which_transforms = "lab_data"   # change transform source as needed.
+    which_transforms = "data"   # change transform source as needed.  data; lab_data
     for t in config[which_transforms]["transforms"]["torch"]:
         if t.get("name") == "add_parent_dir":
             t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
@@ -243,12 +237,116 @@ def build_datasets(config: dict) -> dict:
         seed=config["seed"],
         eager=True,
     ).to_framework_dataset(dataset_ops=config["data"]["dataset_ops"])
-    val_dataset = PyTorchPipeline(val_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
-    test_dataset = PyTorchPipeline(test_provider, transforms[:-1]).to_memory_dataset(config["data"]["dataset_ops"])
+    transforms = transforms# [:-1] # remove the last transform (e.g. thresholding) for val/test if use the lab_data one, since it add one extra for compensate ref/MMF cam setting difference
+    val_dataset = PyTorchPipeline(val_provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
+    test_dataset = PyTorchPipeline(test_provider, transforms).to_memory_dataset(config["data"]["dataset_ops"])
 
 
 
 
+
+    # ====================================
+    # Case 3-b :With Pipeline that using data augmentation. Nearest neighbor based combinator, pattern generator take real image (infinite loop)
+    # ====================================
+    # train_provider = SqlProvider(
+    #     sources={
+    #         "connection": db_paths[0],
+    #         "sql": config["sql"]["processed_chromox_cropped_line_scan"],
+    #     },
+    #     output_config={"list": "image_path"},
+    # )
+    # eval_provider = SqlProvider(
+    #     sources={
+    #         "connection": db_paths[0],
+    #         "sql": config["sql"]["processed_chromox_cropped_random_scan_eval"],
+    #     },
+    #     output_config={"list": "image_path"},
+    # )
+    # val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
+
+    # # pattern source: all random-scan images
+    # pattern_source_provider = SqlProvider(
+    #     sources={
+    #         "connection": db_paths[0],
+    #         "sql": config["sql"]["processed_chromox_cropped_random_scan_all"],
+    #     },
+    #     output_config={"list": "image_path"},
+    # )
+
+    # # basis transforms for train/val/test (same as your existing logic)
+    # for t in config["data"]["transforms"]["torch"]:
+    #     if t.get("name") == "add_parent_dir":
+    #         t.setdefault("params", {})["parent_dir"] = str(dataset_dirs[0])
+    #         break
+    # full_transforms = build_transforms_from_config(config["data"]["transforms"]["torch"])
+    # transforms_2 = full_transforms.copy()
+
+    # # pattern transforms: load image -> grayscale -> downsample to 32x32 -> normalize
+    # pattern_tf_cfg = [
+    #     {"name": "add_parent_dir", "params": {"parent_dir": str(dataset_dirs[0])}},
+    #     {"name": "load_image"},
+    #     {"name": "to_narray"},
+    #     {"name": "to_grayscale"},
+    #     {"name": "resize", "params": {"size": [25, 25], "interpolation": "area"}},
+    #     {"name": "threshold", "params": {"threshold": 50.0, "threshold_value": 0.0, "threshold_mode": "below"}},
+    #     {
+    #         "name": "remap_range",
+    #         "params": {
+    #             "current_min": 0.0,
+    #             "current_max": 255.0,
+    #             "target_min": 0.0,
+    #             "target_max": 1.0,
+    #         },
+    #     },
+    # ]
+
+    # # if upstream returns (x, y), keep only one image for the pattern stream
+    # def keep_one_image(sample):
+    #     if isinstance(sample, (tuple, list)):
+    #         return sample[1] if len(sample) > 1 else sample[0]
+    #     return sample
+
+    # pattern_transforms = [*build_transforms_from_config(pattern_tf_cfg), keep_one_image]
+
+    # pattern_stream = pattern_gen.image_pattern_stream(
+    #     source=pattern_source_provider,
+    #     transforms=pattern_transforms,
+    #     shuffle=False,   # loops through all images in order forever
+    #     seed=config["seed"],
+    # )
+
+    # combinator = SpatialNearestCombinator(
+    #     pattern_provider=pattern_stream,
+    #     skip_zero=True,
+    #     eps=1e-8,
+    #     jitter_mode="global_cell",
+    #     jitter_alpha=1.0,
+    #     transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
+    # )
+
+    # train_dataset = CachedBasisPipeline(
+    #     train_provider,
+    #     combinator=combinator,
+    #     transforms=full_transforms,
+    #     basis_position_extractor=make_centroid_position_extractor(
+    #         method="first_moment",
+    #         component=1,
+    #     ),
+    #     num_samples=config["data"]["total_train_samples"],
+    #     seed=config["seed"],
+    #     eager=True,
+    # ).to_framework_dataset(dataset_ops=config["data"]["dataset_ops"])
+
+    # val_dataset = PyTorchPipeline(
+    #     val_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+
+    # test_dataset = PyTorchPipeline(
+    #     test_provider,
+    #     transforms_2
+    # ).to_memory_dataset(config["data"]["dataset_ops"])
+    
     
     
 
