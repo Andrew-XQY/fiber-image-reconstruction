@@ -525,7 +525,7 @@ lab_data:
           transforms:
           - name: torch_scale
             params:
-              scale_factor: 0.159
+              scale_factor: 1.0                 # 0.159 for 2025-11-06 one (compensate specific cam setting), 1.0 for no compensation
           - name: identity
 
 
