@@ -18,6 +18,7 @@ paths:
   clear_chromox_saturday: ${paths.datasets.clear_chromox_saturday}
   processed_pure_dmd: ${paths.datasets.processed_pure_dmd}
   clear_2022: ${paths.datasets.clear_2022}
+  2025-11-06: ${paths.datasets.2025-11-06}
 
   processed_dmd: ${paths.datasets.processed_dmd}
   processed_chromox: ${paths.datasets.processed_chromox}
@@ -403,7 +404,30 @@ sql:
     WHERE fold_id = 1
     ORDER BY grp_id, pos_in_grp;
 
+  clear_dmd_position_basis: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE experiment_description = 'position based coupling intensity'
+      AND purpose = 'intensity_position'
+      AND batch IN (9)
+  clear_dmd_eval: |
+    SELECT image_path
+    FROM mmf_dataset_metadata
+    WHERE experiment_description IN (
+      'local real beam image for evaluation'
+      -- , '2d multi-gaussian distributions simulation'
+    )
+  2025-11-06_train: |
+    SELECT image_path
+        FROM mmf_dataset_metadata
+        WHERE batch IN (2)
+        ORDER BY image_path
 
+  2025-11-06_eval: |
+    SELECT image_path
+        FROM mmf_dataset_metadata
+        WHERE batch IN (6)
+        AND comments is NULL
 
 
 

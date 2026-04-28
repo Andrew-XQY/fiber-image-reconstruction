@@ -119,8 +119,8 @@ sql:
     SELECT image_path
     FROM mmf_dataset_metadata
     WHERE experiment_description IN (
-      'local real beam image for evaluation',
-      '2d multi-gaussian distributions simulation'
+      'local real beam image for evaluation'
+      -- , '2d multi-gaussian distributions simulation'
     )
 
 
@@ -192,7 +192,7 @@ sql:
     FROM final_sorted
     WHERE out_idx % (0 + 1) = 0
     ORDER BY CAST(image_id AS INTEGER) ASC;
-
+    
 
   processed_chromox_cropped_random_scan_all: |
     -- Full pool for cropped random scan, using the same eligibility rules as eval/train.
@@ -584,6 +584,34 @@ combinator:
                 clip_min: 0
                 clip_max: 1
                 
+image_generator:
+  transforms:
+    - name: "add_parent_dir"                  
+      params: 
+        parent_dir: null                      # This should be the directory where the images are stored after extraction
+    - name: load_image
+    - name: to_narray
+    - name: to_grayscale
+    - name: split_width
+      params:
+        swap: true
+    - name: tuple_select
+      params:
+        index: 1
+    - name: resize
+      params:
+        size: [22, 22]
+    - name: threshold
+      params:
+        threshold: 10.0
+        threshold_value: 0.0
+        threshold_mode: below
+    - name: remap_range
+      params:
+        current_min: 0.0
+        current_max: 255.0
+        target_min: 0.0
+        target_max: 1.0
 
                 
 extra_files: ["models/CAE.py"]
