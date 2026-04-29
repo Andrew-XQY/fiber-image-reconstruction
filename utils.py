@@ -297,7 +297,7 @@ def build_datasets(config: dict) -> dict:
     sgm_stream = build_sgm_stream(config)
     mixed_stream = pattern_gen.weighted_stream(
         sources=[real_stream, sgm_stream],
-        probabilities=[1, 0],  # [1, 0] real only; [0.5, 0.5] mixed; [0, 1] sgm only
+        probabilities=[config["weighted_stream"]["real_weight"], config["weighted_stream"]["sgm_weight"]],
         seed=config["seed"],
     )
     combinator = SpatialNearestCombinator(

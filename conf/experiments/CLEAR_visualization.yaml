@@ -500,7 +500,7 @@ simulation:
 
 
 
-image_generator:
+image_generator:                              # image based generator, similar idea of SGM generator.
   transforms:
     - name: "add_parent_dir"                  
       params: 
@@ -516,10 +516,10 @@ image_generator:
         index: 1
     - name: resize
       params:
-        size: [22, 22]
+        size: [32, 32]
     - name: threshold
       params:
-        threshold: 10.0
+        threshold: 20.0
         threshold_value: 0.0
         threshold_mode: below
     - name: remap_range

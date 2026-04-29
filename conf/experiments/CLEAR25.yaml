@@ -434,26 +434,41 @@ sql:
 #         size: [23, 23]                         # convient for next step (orthognal basis) to decompose the image.
 #         interpolation: "bilinear"
 
-simulation:
-  canvas_size:
-  - 256
-  - 256
-  total_Guassian_num: 100
-  max_intensity: 100
-  minimum_pixel_threshold: 5.0
-  fade_rate: 0.97
-  std_1: 0.015
-  std_2: 0.08
-  distribution: other
-  process_functions:
-  - name: remap_range
-  - name: resize
-    params:
-      size:
-      - 32
-      - 32
-      interpolation: bilinear
+# simulation:
+#   canvas_size:
+#   - 256
+#   - 256
+#   total_Guassian_num: 100
+#   max_intensity: 100
+#   minimum_pixel_threshold: 5.0
+#   fade_rate: 0.97
+#   std_1: 0.015
+#   std_2: 0.08
+#   distribution: other
+#   process_functions:
+#   - name: remap_range
+#   - name: resize
+#     params:
+#       size:
+#       - 32
+#       - 32
+#       interpolation: bilinear
 
+simulation:
+  canvas_size: [256, 256]                                                  
+  total_Guassian_num: 5                        # SGM total number of Guassian components
+  max_intensity: 1                             # Max intensity for each Guassian component
+  minimum_pixel_threshold: 10.0                 # Cut off background level, below this value will be set to 0
+  fade_rate: 0.5                                # Controls how many active Guassian compoents in a probablistic way
+  std_1: 0.01                                   # Guassian std lower bound
+  std_2: 0.03                                   # Guassian std upper bound
+  distribution: "other" 
+  process_functions:                           # before the 
+    - name: "remap_range"                      # Normalize pixel values to [0,1]
+    - name: "resize"                           # Resize to match input dimensions
+      params:
+        size: [23, 23]                         # convient for next step (orthognal basis) to decompose the image.
+        interpolation: "bilinear"
 
 
 
@@ -508,7 +523,7 @@ data:
         seed: *seed                             # Random seed for reproducibility
 
 
-lab_data:                   
+lab_data:                                       
   transforms:                                   # CERN optical lab used training setup, scale_factor specifically tuned based on the cameras params
     torch:
       - name: "add_parent_dir"                  
@@ -613,5 +628,9 @@ image_generator:
         target_min: 0.0
         target_max: 1.0
 
+
+weighted_stream:                              # parameters for mixture pattern generator, currently [1, 0] real only; [0.5, 0.5] mixed; [0, 1] sgm only
+  real_weight: 0.5
+  sgm_weight: 0.5
                 
 extra_files: ["models/CAE.py"]
