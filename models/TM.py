@@ -77,7 +77,8 @@ class TransmissionMatrix(nn.Module):
         Forward pass: apply transmission matrix to input.
         
         Args:
-            x: Input tensor of shape (batch_size, height, width) or (batch_size, features)
+            x: Input tensor of shape (batch_size, height, width),
+               (batch_size, 1, height, width), or (batch_size, features)
         
         Returns:
             Output tensor of shape (batch_size, output_height, output_width)
@@ -85,12 +86,19 @@ class TransmissionMatrix(nn.Module):
         batch_size = x.size(0)
         
         # Flatten if necessary
-        if x.dim() == 3:  # (batch_size, height, width)
-            x_flat = x.view(batch_size, -1)
+        if x.dim() == 4:  # (batch_size, channels, height, width)
+            if x.size(1) != 1:
+                raise ValueError(f"Expected single-channel 4D input, got {x.size(1)} channels")
+            x_flat = x.reshape(batch_size, -1)
+        elif x.dim() == 3:  # (batch_size, height, width)
+            x_flat = x.reshape(batch_size, -1)
         elif x.dim() == 2:  # (batch_size, features)
             x_flat = x
         else:
-            raise ValueError(f"Expected 2D or 3D input, got {x.dim()}D")
+            raise ValueError(f"Expected 2D, 3D, or 4D input, got {x.dim()}D")
+        
+        if x_flat.size(1) != self.input_dim:
+            raise ValueError(f"Expected {self.input_dim} input features, got {x_flat.size(1)}")
         
         # Apply transmission matrix
         output_flat = self.transmission_matrix(x_flat)
