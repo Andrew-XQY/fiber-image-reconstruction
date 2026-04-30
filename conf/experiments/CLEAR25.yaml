@@ -29,18 +29,18 @@ paths:
   processed_chromox_cropped: ${paths.datasets.processed_chromox_cropped}
   
 
-# model:
-#   name: "CAE"                                  # Factory key for model architecture
-#   in_channels: 1
-#   out_channels: 1
-#   kernel_size: 4
-#   encoder:          [64,   128, 128, 256, 512, 1024]      # 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4
-#   decoder:          [1024, 512, 256, 128, 128, 64  ]
-#   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-#   apply_dropout:    [1,    1,   0,   0,   0,   0   ]
-#   final_activation: sigmoid
+model:
+  name: "CAE"                                  # Factory key for model architecture
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,   128, 128, 256, 512, 1024]      # 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4
+  decoder:          [1024, 512, 256, 128, 128, 64  ]
+  apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
+  apply_dropout:    [1,    1,   0,   0,   0,   0   ]
+  final_activation: sigmoid
 
-# model:                                          # PRAB version model
+# model:                                          # PRAB version model, largest capacity tried
 #   name: "CAE"
 #   in_channels: 1
 #   out_channels: 1
@@ -51,8 +51,8 @@ paths:
 #   apply_dropout:    [1,    1,   1,   0,   0,   0]
 #   final_activation: sigmoid
 
-model:
-  name: "TM"                             # Factory key for Transmission Matrix architecture 
+# model:
+#   name: "TM"                       
 
 sql:
   2025-11-06_train: |
@@ -542,73 +542,73 @@ dataset_structure:
   db: "/db/dataset_meta.db"                     # Path to the SQLite database containing dataset metadata
 
 
-# data:
-#   total_train_samples: 5000       
-#   total_val_samples: 1000              
-#   train_val_split: 0.9                          # Train/validation split ratio 90/10
-#   val_test_split: 0.5                           # Validation/test split ratio 50/50
-#   input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
-#   output_shape: &out [256, 256]                 # Input pattern size [H, W]
-#   transforms:
-#     torch:
-#       - name: "add_parent_dir"                  # Add parent directory to image paths from SQL query
-#         params: 
-#           parent_dir: null                      # This should be the directory where the images are stored after extraction
-#       - name: "torch_load_image"                # Load the image based on file path
-#       - name: "torch_to_tensor"                 # Convert to tensor
-#       - name: "torch_remap_range"               # Normalize pixel values to [0,1]               
-#       - name: "torch_split_width"               # Split image into left/right halves on width
-#         params:
-#           swap: True       
-#   dataset_ops:                                  # Dataset level operations
-#     - name: "torch_batch"                       # Batch images
-#       params:
-#         batch_size: *batch                      # Number of images per batch
-#         shuffle: True                           # Shuffle dataset
-#         num_workers: 0                          # Number of worker threads for data loading
-#         prefetch_factor: 2                      # Number of batches to prefetch
-#         seed: *seed                             # Random seed for reproducibility
-
-
-# specific data processing pipeline for the TM (Transmission Matrix) 
-data: 
-  train_val_split: 0.9                    # Train/validation split ratio
-  val_test_split: 0.5                     # Validation/test split ratio
-  input_shape: &inp [256, 256]       # Speckle image dimensions [H, W]
-  output_shape: &out [32, 32]              # Input pattern size [H, W]
+data:
+  total_train_samples: 5000       
+  total_val_samples: 1000              
+  train_val_split: 0.9                          # Train/validation split ratio 90/10
+  val_test_split: 0.5                           # Validation/test split ratio 50/50
+  input_shape: &inp [256, 256]                  # Speckle image dimensions [H, W]
+  output_shape: &out [256, 256]                 # Input pattern size [H, W]
   transforms:
     torch:
       - name: "add_parent_dir"                  # Add parent directory to image paths from SQL query
         params: 
-          parent_dir: null    
-      - name: "torch_load_image"          # Image loading transform
-      - name: "torch_to_tensor"           # Convert to tensor
-      - name: "torch_remap_range"         # Normalize pixel values to [0,1]
-      - name: "torch_split_width"         # Split image into left/right halves
+          parent_dir: null                      # This should be the directory where the images are stored after extraction
+      - name: "torch_load_image"                # Load the image based on file path
+      - name: "torch_to_tensor"                 # Convert to tensor
+      - name: "torch_remap_range"               # Normalize pixel values to [0,1]               
+      - name: "torch_split_width"               # Split image into left/right halves on width
         params:
-          swap: True                      # Swap left/right halves
-      - name: "multi_transform"           # take the left/right and apply transforms in sequence order
-        params:
-          transforms:
-            - name: "torch_resize"        # Resize image to match 
-              params:
-                size: *inp                # Resize dimensions [H, W]
-            - name: "torch_resize"        # Resize image to match 
-              params:
-                size: *out                # Resize dimensions [H, W]
-      - name: "multi_transform"           # Apply multiple transforms in sequence
-        params:
-          transforms:
-            - name: "torch_squeeze"        
-            - name: "torch_squeeze"        
-  dataset_ops:                            # Dataset level operations
-    - name: "torch_batch"                 # Batch images
+          swap: True       
+  dataset_ops:                                  # Dataset level operations
+    - name: "torch_batch"                       # Batch images
       params:
-        batch_size: *batch                # Number of images per batch
-        shuffle: True                     # Shuffle dataset
-        num_workers: 0                    # Number of worker threads for data loading
-        prefetch_factor: 2                # Number of batches to prefetch
-        seed: *seed                       # Random seed for reproducibility
+        batch_size: *batch                      # Number of images per batch
+        shuffle: True                           # Shuffle dataset
+        num_workers: 0                          # Number of worker threads for data loading
+        prefetch_factor: 2                      # Number of batches to prefetch
+        seed: *seed                             # Random seed for reproducibility
+
+
+# specific data processing pipeline for the TM (Transmission Matrix) 
+# data: 
+#   train_val_split: 0.9                    # Train/validation split ratio
+#   val_test_split: 0.5                     # Validation/test split ratio
+#   input_shape: &inp [256, 256]       # Speckle image dimensions [H, W]
+#   output_shape: &out [32, 32]              # Input pattern size [H, W]
+#   transforms:
+#     torch:
+#       - name: "add_parent_dir"                  # Add parent directory to image paths from SQL query
+#         params: 
+#           parent_dir: null    
+#       - name: "torch_load_image"          # Image loading transform
+#       - name: "torch_to_tensor"           # Convert to tensor
+#       - name: "torch_remap_range"         # Normalize pixel values to [0,1]
+#       - name: "torch_split_width"         # Split image into left/right halves
+#         params:
+#           swap: True                      # Swap left/right halves
+#       - name: "multi_transform"           # take the left/right and apply transforms in sequence order
+#         params:
+#           transforms:
+#             - name: "torch_resize"        # Resize image to match 
+#               params:
+#                 size: *inp                # Resize dimensions [H, W]
+#             - name: "torch_resize"        # Resize image to match 
+#               params:
+#                 size: *out                # Resize dimensions [H, W]
+#       - name: "multi_transform"           # Apply multiple transforms in sequence
+#         params:
+#           transforms:
+#             - name: "torch_squeeze"        
+#             - name: "torch_squeeze"        
+#   dataset_ops:                            # Dataset level operations
+#     - name: "torch_batch"                 # Batch images
+#       params:
+#         batch_size: *batch                # Number of images per batch
+#         shuffle: True                     # Shuffle dataset
+#         num_workers: 0                    # Number of worker threads for data loading
+#         prefetch_factor: 2                # Number of batches to prefetch
+#         seed: *seed                       # Random seed for reproducibility
 
 
 lab_data:                                       
