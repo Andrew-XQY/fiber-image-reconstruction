@@ -76,6 +76,7 @@ if any(win in machine for win in ["win", "windows"]): # windows
             "chromox_cropped_cae_line_scan_mixture": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture/model.pt",
             "chromox_cropped_cae_line_scan_mixture_prab_model": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture_prab_model/model.pt",
             "chromox_cropped_TM_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_TM_line_scan/model.pt",
+            "chromox_cropped_cae_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan/model.pt",
             
             "Model_trained_on_CHROMOX_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_only/model.pt",
             "Model_trained_on_CHROMOX_LASER_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_LASER_only/model.pt",
@@ -96,6 +97,7 @@ if any(win in machine for win in ["win", "windows"]): # windows
                 "chromox_cropped_cae_line_scan_mixture": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture/inference/",
                 "chromox_cropped_cae_line_scan_mixture_prab_model": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture_prab_model/inference/",
                 "chromox_cropped_TM_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_TM_line_scan/inference/",
+                "chromox_cropped_cae_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan/inference/",
                 
                 "Model_trained_on_CHROMOX_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_only/inference/",
                 "Model_trained_on_CHROMOX_LASER_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_LASER_only/inference/",

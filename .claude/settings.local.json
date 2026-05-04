@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c \"import xflow; import os; print\\(os.path.dirname\\(xflow.__file__\\)\\)\")"
+      "Bash(python -c \"import xflow; import os; print\\(os.path.dirname\\(xflow.__file__\\)\\)\")",
+      "Read(//c/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan/inference/**)"
     ]
   }
 }
