@@ -18,7 +18,7 @@ if any(win in machine for win in ["win", "windows"]): # windows
         "globel_save_to": "C:/Users/qiyuanxu/Desktop/",
         
         "processed_chromox_ipac": "C:/Users/qiyuanxu/Desktop/CLEAR25_Chromox/",
-        
+
         "DMD_cockcroft": {
             "dataset_db_dir": "C:/Users/qiyuanxu/Documents/DataHub/local_images/backup/2024-08-15/db/dataset_meta.db",
             "dataset_extracted_dir": "C:/Users/qiyuanxu/Documents/DataHub/local_images/backup/2024-08-15/"
@@ -35,6 +35,11 @@ if any(win in machine for win in ["win", "windows"]): # windows
             "output_dataset_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_DMD/dataset/",
             "dataset_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_DMD/",
             "output_db_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_DMD/db/dataset_meta.db",
+        },
+        
+        "Chromox_cropped_only": {
+            "dataset_db_dir": "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Chromox_Cropped/db/dataset_meta.db",
+            "dataset_extracted_dir": "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Chromox_Cropped/",
         },
         
         "Chromox_only": {
