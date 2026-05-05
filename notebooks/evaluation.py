@@ -222,7 +222,9 @@ RESIDUAL_SCATTER_XLIM = (0.0, 1.0)
 RESIDUAL_SCATTER_YLIM = (-1.0, 1.0)
 HIST_X_RANGE_PCT = (-50.0, 50.0)
 HIST_BINS = 50
-HIST_Y_MAX = 350
+HIST_Y_MAX = None
+HIST_X_COVERAGE_PCT = 90.0
+HIST_Y_HEADROOM = 0.10
 
 DIM_STYLE = {
     "h": {"name": "Horizontal", "color": APS_COLORS[4]},
@@ -334,9 +336,10 @@ def plot_residual_vs_label(df, param_type="centroid", fit_method="gaussian",
 
 
 def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
-                           dims=("h", "v"), x_range_pct=(-100.0, 100.0),
-                           bins=40, y_max=None,
-                           x_coverage_pct=None, y_headroom=None):
+                           dims=("h", "v"), x_range_pct=HIST_X_RANGE_PCT,
+                           bins=HIST_BINS, y_max=HIST_Y_MAX,
+                           x_coverage_pct=HIST_X_COVERAGE_PCT,
+                           y_headroom=HIST_Y_HEADROOM):
     # Pre-pass: gather residuals per dim so we can size axes adaptively.
     per_dim = []
     pooled = []
@@ -364,7 +367,9 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
     hist_bins = np.linspace(x_min, x_max, int(bins) + 1)
     max_count = 0.0
     for dim, r in per_dim:
-        r = np.clip(r, x_min, x_max)
+        r = r[(r >= x_min) & (r <= x_max)]
+        if r.size == 0:
+            continue
         counts, edges, _ = ax.hist(r, bins=hist_bins, alpha=0.38,
                                    color=DIM_STYLE[dim]["color"],
                                    label=f"{DIM_STYLE[dim]['name']} {param_type}")
@@ -399,9 +404,10 @@ def make_three_plots(df, param_type="centroid", fit_method="gaussian",
                      dims=("h", "v"),
                      pred_gt_xlim=(0.0, 1.0), pred_gt_ylim=(0.0, 1.0),
                      residual_xlim=(0.0, 1.0), residual_ylim=(-1.0, 1.0),
-                     hist_x_range_pct=(-100.0, 100.0),
-                     hist_bins=40, hist_y_max=None,
-                     hist_x_coverage_pct=None, hist_y_headroom=None):
+                     hist_x_range_pct=HIST_X_RANGE_PCT,
+                     hist_bins=HIST_BINS, hist_y_max=HIST_Y_MAX,
+                     hist_x_coverage_pct=HIST_X_COVERAGE_PCT,
+                     hist_y_headroom=HIST_Y_HEADROOM):
     clean_df, active_dims = prepare_plot_df(
         df=df, param_type=param_type, fit_method=fit_method, dims=dims,
     )
