@@ -93,14 +93,17 @@ def build_datasets(config: dict) -> dict:
         
         
         
+        
     # ====================================
     # Case 2 :single dataset (source).
     # ====================================
+    train_sql_key = config["data"].get("train_sql_key", "processed_chromox_cropped_line_scan_one_per_group")
+    eval_sql_key = config["data"].get("eval_sql_key", "processed_chromox_cropped_random_scan_eval")
     train_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_line_scan_all"]}, output_config={'list': "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"][train_sql_key]}, output_config={'list': "image_path"}
     )#.subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
     eval_provider = SqlProvider(
-        sources={"connection": db_paths[0], "sql": config["sql"]["processed_chromox_cropped_random_scan_all"]}, output_config={'list': "image_path"}
+        sources={"connection": db_paths[0], "sql": config["sql"][eval_sql_key]}, output_config={'list': "image_path"}
     )#.subsample(n_samples=config["data"]["total_train_samples"], seed=config["seed"])
     # train_provider, eval_provider = train_provider.split(config["data"]["train_val_split"])
     val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
