@@ -13,6 +13,24 @@ from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from xflow.extensions.style.aps import APS_COLORS, set_aps_double_column
 
+# Save every figure as transparent vector PDF by default.
+# `.pdf` extension on savefig() triggers the vector backend automatically;
+# this rcParam handles the transparent background once for all callers.
+plt.rcParams["savefig.transparent"] = True
+
+PREVIEW_DPI = 500  # high-res raster companion for publication-style previews
+
+
+def save_fig(fig, path_no_ext, preview=False, **kwargs):
+    """Save `fig` as a transparent PDF; if `preview`, also a high-res PNG.
+
+    Pass paths *without* an extension. Extra kwargs (e.g. `bbox_inches="tight"`)
+    are forwarded to both savefigs.
+    """
+    fig.savefig(f"{path_no_ext}.pdf", **kwargs)
+    if preview:
+        fig.savefig(f"{path_no_ext}.png", dpi=PREVIEW_DPI, **kwargs)
+
 CROP_METRIC_COLS = (
     "crop_inside_sum",
     "crop_outside_sum",
