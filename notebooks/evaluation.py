@@ -309,9 +309,12 @@ def _new_ax():
     return fig, ax
 
 
-def _legend(ax, loc="best", fontsize=LEGEND_FONT_SIZE):
-    ax.legend(loc=loc, fontsize=fontsize, frameon=True,
-              facecolor="white", edgecolor="black", framealpha=0.95)
+def _legend(ax, loc="best", fontsize=LEGEND_FONT_SIZE, frameon=True):
+    if frameon:
+        ax.legend(loc=loc, fontsize=fontsize, frameon=True,
+                  facecolor="white", edgecolor="black", framealpha=0.95)
+    else:
+        ax.legend(loc=loc, fontsize=fontsize, frameon=False)
 
 
 def plot_pred_vs_label(df, param_type="centroid", fit_method="gaussian",
@@ -360,7 +363,8 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
                            y_headroom=HIST_Y_HEADROOM,
                            annotate_stats=False,
                            annotate_loc="upper left",
-                           legend_fontsize=LEGEND_FONT_SIZE):
+                           legend_fontsize=LEGEND_FONT_SIZE,
+                           legend_frameon=True):
     # Pre-pass: gather residuals per dim so we can size axes adaptively.
     per_dim = []
     pooled = []
@@ -405,13 +409,21 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
                                    label=f"{DIM_STYLE[dim]['name']} {param_type}")
         if counts.size and visible_mask.any():
             max_count = max(max_count, float(np.max(counts[visible_mask])))
-        if r.size > 1:
-            mu = float(np.mean(r))
-            sigma = float(np.std(r, ddof=1))
+        # Truncated-sample Gaussian fit: estimate μ and σ from residuals inside
+        # the visible window [x_min, x_max] only, so extreme outliers don't
+        # inflate σ relative to the bars the viewer sees. Scaled to the in-window
+        # count so curve height matches the visible histogram. Note: truncation
+        # biases σ slightly low; the effect is small when the window contains
+        # the bulk of the distribution.
+        fit_mask = (r >= x_min) & (r <= x_max)
+        r_fit = r[fit_mask]
+        if r_fit.size > 1:
+            mu = float(np.mean(r_fit))
+            sigma = float(np.std(r_fit, ddof=1))
             if sigma > 0:
                 xfit = np.linspace(edges[0], edges[-1], 300)
                 bw = edges[1] - edges[0]
-                yfit = (r.size * bw
+                yfit = (r_fit.size * bw
                         * (1.0 / (sigma * np.sqrt(2.0 * np.pi)))
                         * np.exp(-0.5 * ((xfit - mu) / sigma) ** 2))
                 ax.plot(xfit, yfit, lw=2.0, color=DIM_STYLE[dim]["color"], alpha=0.95)
@@ -431,7 +443,7 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
         legend_loc = "upper right" if annotate_loc == "upper left" else "upper left"
     else:
         legend_loc = "best"
-    _legend(ax, loc=legend_loc, fontsize=legend_fontsize)
+    _legend(ax, loc=legend_loc, fontsize=legend_fontsize, frameon=legend_frameon)
 
     if annotate_stats and pooled:
         abs_r = np.abs(np.concatenate(pooled))
@@ -445,6 +457,7 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
         else:
             tx, ty, ha = 0.96, 0.96, "right"
         ax.text(tx, ty, txt, transform=ax.transAxes, ha=ha, va="top",
+                multialignment="left",
                 fontsize=LEGEND_FONT_SIZE)
     return fig, ax
 
