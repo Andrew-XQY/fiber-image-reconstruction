@@ -436,7 +436,7 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
     elif y_headroom is not None and max_count > 0:
         ax.set_ylim(0.0, max_count * (1.0 + float(y_headroom)))
 
-    ax.set_xlabel("Residual (%)", fontsize=AXIS_LABEL_SIZE)
+    ax.set_xlabel(f"{str(param_type).capitalize()} error (% of frame)", fontsize=AXIS_LABEL_SIZE)
     ax.set_ylabel("Count",        fontsize=AXIS_LABEL_SIZE)
 
     if annotate_stats and pooled:
@@ -446,10 +446,11 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
     _legend(ax, loc=legend_loc, fontsize=legend_fontsize, frameon=legend_frameon)
 
     if annotate_stats and pooled:
-        abs_r = np.abs(np.concatenate(pooled))
+        signed_r = np.concatenate(pooled)
+        abs_r = np.abs(signed_r)
         n = int(len(df))
         median_pct = float(np.median(abs_r))
-        q1, q3 = np.percentile(abs_r, [25, 75])
+        q1, q3 = np.percentile(signed_r, [25, 75])
         iqr_pct = float(q3 - q1)
         txt = f"n = {n}\nmedian = {median_pct:.2f}%\nIQR = {iqr_pct:.2f}%"
         if annotate_loc == "upper left":
