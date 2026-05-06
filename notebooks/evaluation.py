@@ -309,8 +309,8 @@ def _new_ax():
     return fig, ax
 
 
-def _legend(ax):
-    ax.legend(fontsize=LEGEND_FONT_SIZE, frameon=True,
+def _legend(ax, loc="best", fontsize=LEGEND_FONT_SIZE):
+    ax.legend(loc=loc, fontsize=fontsize, frameon=True,
               facecolor="white", edgecolor="black", framealpha=0.95)
 
 
@@ -357,7 +357,10 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
                            dims=("h", "v"), x_range_pct=HIST_X_RANGE_PCT,
                            bins=HIST_BINS, y_max=HIST_Y_MAX,
                            x_coverage_pct=HIST_X_COVERAGE_PCT,
-                           y_headroom=HIST_Y_HEADROOM):
+                           y_headroom=HIST_Y_HEADROOM,
+                           annotate_stats=False,
+                           annotate_loc="upper left",
+                           legend_fontsize=LEGEND_FONT_SIZE):
     # Pre-pass: gather residuals per dim so we can size axes adaptively.
     per_dim = []
     pooled = []
@@ -372,7 +375,7 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
         per_dim.append((dim, r))
         pooled.append(r)
 
-    # X range: adaptive symmetric covering x_coverage_pct of |residual|, else fixed x_range_pct.
+    # Display window (set_xlim only): adaptive symmetric covering x_coverage_pct of |residual|, else fixed x_range_pct.
     if x_coverage_pct is not None and pooled:
         half = float(np.percentile(np.abs(np.concatenate(pooled)), float(x_coverage_pct)))
         if half <= 0:
@@ -381,18 +384,27 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
     else:
         x_min, x_max = float(x_range_pct[0]), float(x_range_pct[1])
 
+    # Bin range: full data extent (symmetric around 0). Independent of the display window
+    # so changing x_range_pct only zooms — bin width and bar heights stay invariant.
+    if pooled:
+        data_extent = float(np.max(np.abs(np.concatenate(pooled))))
+        if data_extent <= 0:
+            data_extent = max(abs(x_min), abs(x_max), 1.0)
+        bin_min, bin_max = -data_extent, data_extent
+    else:
+        bin_min, bin_max = x_min, x_max
+
     fig, ax = _new_ax()
-    hist_bins = np.linspace(x_min, x_max, int(bins) + 1)
+    hist_bins = np.linspace(bin_min, bin_max, int(bins) + 1)
+    bin_centers = 0.5 * (hist_bins[:-1] + hist_bins[1:])
+    visible_mask = (bin_centers >= x_min) & (bin_centers <= x_max)
     max_count = 0.0
     for dim, r in per_dim:
-        r = r[(r >= x_min) & (r <= x_max)]
-        if r.size == 0:
-            continue
         counts, edges, _ = ax.hist(r, bins=hist_bins, alpha=0.38,
                                    color=DIM_STYLE[dim]["color"],
                                    label=f"{DIM_STYLE[dim]['name']} {param_type}")
-        if counts.size:
-            max_count = max(max_count, float(np.max(counts)))
+        if counts.size and visible_mask.any():
+            max_count = max(max_count, float(np.max(counts[visible_mask])))
         if r.size > 1:
             mu = float(np.mean(r))
             sigma = float(np.std(r, ddof=1))
@@ -414,7 +426,26 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
 
     ax.set_xlabel("Residual (%)", fontsize=AXIS_LABEL_SIZE)
     ax.set_ylabel("Count",        fontsize=AXIS_LABEL_SIZE)
-    _legend(ax)
+
+    if annotate_stats and pooled:
+        legend_loc = "upper right" if annotate_loc == "upper left" else "upper left"
+    else:
+        legend_loc = "best"
+    _legend(ax, loc=legend_loc, fontsize=legend_fontsize)
+
+    if annotate_stats and pooled:
+        abs_r = np.abs(np.concatenate(pooled))
+        n = int(len(df))
+        median_pct = float(np.median(abs_r))
+        q1, q3 = np.percentile(abs_r, [25, 75])
+        iqr_pct = float(q3 - q1)
+        txt = f"n = {n}\nmedian = {median_pct:.2f}%\nIQR = {iqr_pct:.2f}%"
+        if annotate_loc == "upper left":
+            tx, ty, ha = 0.04, 0.96, "left"
+        else:
+            tx, ty, ha = 0.96, 0.96, "right"
+        ax.text(tx, ty, txt, transform=ax.transAxes, ha=ha, va="top",
+                fontsize=LEGEND_FONT_SIZE)
     return fig, ax
 
 
@@ -425,7 +456,9 @@ def make_three_plots(df, param_type="centroid", fit_method="gaussian",
                      hist_x_range_pct=HIST_X_RANGE_PCT,
                      hist_bins=HIST_BINS, hist_y_max=HIST_Y_MAX,
                      hist_x_coverage_pct=HIST_X_COVERAGE_PCT,
-                     hist_y_headroom=HIST_Y_HEADROOM):
+                     hist_y_headroom=HIST_Y_HEADROOM,
+                     hist_annotate_stats=False,
+                     hist_annotate_loc="upper left"):
     clean_df, active_dims = prepare_plot_df(
         df=df, param_type=param_type, fit_method=fit_method, dims=dims,
     )
@@ -437,7 +470,9 @@ def make_three_plots(df, param_type="centroid", fit_method="gaussian",
                                    dims=active_dims, x_range_pct=hist_x_range_pct,
                                    bins=hist_bins, y_max=hist_y_max,
                                    x_coverage_pct=hist_x_coverage_pct,
-                                   y_headroom=hist_y_headroom)
+                                   y_headroom=hist_y_headroom,
+                                   annotate_stats=hist_annotate_stats,
+                                   annotate_loc=hist_annotate_loc)
     return f1, f2, f3
 
 
