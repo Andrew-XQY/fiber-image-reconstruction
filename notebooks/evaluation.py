@@ -331,8 +331,10 @@ def plot_pred_vs_label(df, param_type="centroid", fit_method="gaussian",
             lw=REF_LINE_WIDTH, color=REF_COLOR)
     ax.set_xlim(*xlim); ax.set_ylim(*ylim)
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel("Ground truth", fontsize=AXIS_LABEL_SIZE)
-    ax.set_ylabel("Prediction",   fontsize=AXIS_LABEL_SIZE)
+    xlabel_map = {"centroid": "Actual beam centroids", "width": "Actual beam widths"}
+    ax.set_xlabel(xlabel_map.get(param_type, f"Actual {param_type}"),
+                  fontsize=AXIS_LABEL_SIZE)
+    ax.set_ylabel("Predicted values", fontsize=AXIS_LABEL_SIZE)
     _legend(ax)
     return fig, ax
 
