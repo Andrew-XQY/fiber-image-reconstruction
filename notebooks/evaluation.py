@@ -297,8 +297,8 @@ def _pair(df, fit_method, param_type, dim):
     return gt[m], pred[m]
 
 
-def _new_ax():
-    set_aps_double_column(figsize=FIGSIZE, scale=1.0, legend_background=True)
+def _new_ax(scale=1.0):
+    set_aps_double_column(figsize=FIGSIZE, scale=scale, legend_background=True)
     fig, ax = plt.subplots(figsize=FIGSIZE, constrained_layout=True)
     ax.set_box_aspect(1)
     ax.tick_params(axis="both", which="major",
@@ -318,8 +318,9 @@ def _legend(ax, loc="best", fontsize=LEGEND_FONT_SIZE, frameon=True):
 
 
 def plot_pred_vs_label(df, param_type="centroid", fit_method="gaussian",
-                       dims=("h", "v"), xlim=(0.0, 1.0), ylim=(0.0, 1.0)):
-    fig, ax = _new_ax()
+                       dims=("h", "v"), xlim=(0.0, 1.0), ylim=(0.0, 1.0),
+                       scale=1.0):
+    fig, ax = _new_ax(scale=scale)
     for dim in dims:
         gt, pred = _pair(df, fit_method, param_type, dim)
         if gt.size == 0:
@@ -340,8 +341,9 @@ def plot_pred_vs_label(df, param_type="centroid", fit_method="gaussian",
 
 
 def plot_residual_vs_label(df, param_type="centroid", fit_method="gaussian",
-                           dims=("h", "v"), xlim=(0.0, 1.0), ylim=(-1.0, 1.0)):
-    fig, ax = _new_ax()
+                           dims=("h", "v"), xlim=(0.0, 1.0), ylim=(-1.0, 1.0),
+                           scale=1.0):
+    fig, ax = _new_ax(scale=scale)
     for dim in dims:
         gt, pred = _pair(df, fit_method, param_type, dim)
         if gt.size == 0:
@@ -366,7 +368,8 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
                            annotate_stats=False,
                            annotate_loc="upper left",
                            legend_fontsize=LEGEND_FONT_SIZE,
-                           legend_frameon=True):
+                           legend_frameon=True,
+                           scale=1.0):
     # Pre-pass: gather residuals per dim so we can size axes adaptively.
     per_dim = []
     pooled = []
@@ -400,7 +403,7 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
     else:
         bin_min, bin_max = x_min, x_max
 
-    fig, ax = _new_ax()
+    fig, ax = _new_ax(scale=scale)
     hist_bins = np.linspace(bin_min, bin_max, int(bins) + 1)
     bin_centers = 0.5 * (hist_bins[:-1] + hist_bins[1:])
     visible_mask = (bin_centers >= x_min) & (bin_centers <= x_max)
@@ -448,11 +451,10 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
     _legend(ax, loc=legend_loc, fontsize=legend_fontsize, frameon=legend_frameon)
 
     if annotate_stats and pooled:
-        signed_r = np.concatenate(pooled)
-        abs_r = np.abs(signed_r)
+        abs_r = np.abs(np.concatenate(pooled))
         n = int(len(df))
         median_pct = float(np.median(abs_r))
-        q1, q3 = np.percentile(signed_r, [25, 75])
+        q1, q3 = np.percentile(abs_r, [25, 75])
         iqr_pct = float(q3 - q1)
         txt = f"n = {n}\nmedian = {median_pct:.2f}%\nIQR = {iqr_pct:.2f}%"
         if annotate_loc == "upper left":
@@ -474,21 +476,25 @@ def make_three_plots(df, param_type="centroid", fit_method="gaussian",
                      hist_x_coverage_pct=HIST_X_COVERAGE_PCT,
                      hist_y_headroom=HIST_Y_HEADROOM,
                      hist_annotate_stats=False,
-                     hist_annotate_loc="upper left"):
+                     hist_annotate_loc="upper left",
+                     scale=1.0):
     clean_df, active_dims = prepare_plot_df(
         df=df, param_type=param_type, fit_method=fit_method, dims=dims,
     )
     f1, _ = plot_pred_vs_label(clean_df, param_type=param_type, fit_method=fit_method,
-                               dims=active_dims, xlim=pred_gt_xlim, ylim=pred_gt_ylim)
+                               dims=active_dims, xlim=pred_gt_xlim, ylim=pred_gt_ylim,
+                               scale=scale)
     f2, _ = plot_residual_vs_label(clean_df, param_type=param_type, fit_method=fit_method,
-                                   dims=active_dims, xlim=residual_xlim, ylim=residual_ylim)
+                                   dims=active_dims, xlim=residual_xlim, ylim=residual_ylim,
+                                   scale=scale)
     f3, _ = plot_residual_hist_pct(clean_df, param_type=param_type, fit_method=fit_method,
                                    dims=active_dims, x_range_pct=hist_x_range_pct,
                                    bins=hist_bins, y_max=hist_y_max,
                                    x_coverage_pct=hist_x_coverage_pct,
                                    y_headroom=hist_y_headroom,
                                    annotate_stats=hist_annotate_stats,
-                                   annotate_loc=hist_annotate_loc)
+                                   annotate_loc=hist_annotate_loc,
+                                   scale=scale)
     return f1, f2, f3
 
 
@@ -515,7 +521,7 @@ def add_gaussian_error_columns(df):
 def plot_hex_error_2d(df, param_type="centroid", gridsize=25,
                       xlim=(0.0, 1.0), ylim=(0.0, 1.0),
                       range_mode="full", cmap="viridis",
-                      vmax=None, figsize=(3.8, 3.8)):
+                      vmax=None, figsize=(3.8, 3.8), scale=1.0):
     x   = df[f"label_gaussian_h_{param_type}"].to_numpy()
     y   = df[f"label_gaussian_v_{param_type}"].to_numpy()
     e_h = df[f"error_gaussian_h_{param_type}"].to_numpy()
@@ -529,7 +535,7 @@ def plot_hex_error_2d(df, param_type="centroid", gridsize=25,
         xlim = (lo - pad, hi + pad)
         ylim = xlim
 
-    set_aps_double_column(figsize=figsize, scale=1.0, legend_background=True)
+    set_aps_double_column(figsize=figsize, scale=scale, legend_background=True)
     fig, ax = plt.subplots(figsize=figsize)
     ax.set_box_aspect(1)
     hb = ax.hexbin(x, y, C=mae, reduce_C_function=np.mean, gridsize=gridsize,
