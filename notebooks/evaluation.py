@@ -309,17 +309,24 @@ def _new_ax(scale=1.0):
     return fig, ax
 
 
-def _legend(ax, loc="best", fontsize=LEGEND_FONT_SIZE, frameon=True):
+def _legend(ax, loc="best", fontsize=LEGEND_FONT_SIZE, frameon=True,
+            marker_scale=1.0, handletextpad=None):
+    kwargs = {"loc": loc, "fontsize": fontsize, "markerscale": marker_scale}
+    if handletextpad is not None:
+        kwargs["handletextpad"] = handletextpad
     if frameon:
-        ax.legend(loc=loc, fontsize=fontsize, frameon=True,
+        ax.legend(**kwargs, frameon=True,
                   facecolor="white", edgecolor="black", framealpha=0.95)
     else:
-        ax.legend(loc=loc, fontsize=fontsize, frameon=False)
+        ax.legend(**kwargs, frameon=False)
 
 
 def plot_pred_vs_label(df, param_type="centroid", fit_method="gaussian",
                        dims=("h", "v"), xlim=(0.0, 1.0), ylim=(0.0, 1.0),
-                       scale=1.0):
+                       scale=1.0,
+                       legend_fontsize=LEGEND_FONT_SIZE,
+                       legend_marker_scale=1.0,
+                       legend_handletextpad=None):
     fig, ax = _new_ax(scale=scale)
     for dim in dims:
         gt, pred = _pair(df, fit_method, param_type, dim)
@@ -336,7 +343,9 @@ def plot_pred_vs_label(df, param_type="centroid", fit_method="gaussian",
     ax.set_xlabel(xlabel_map.get(param_type, f"Actual {param_type}"),
                   fontsize=AXIS_LABEL_SIZE)
     ax.set_ylabel("Predicted values", fontsize=AXIS_LABEL_SIZE)
-    _legend(ax)
+    _legend(ax, fontsize=legend_fontsize,
+            marker_scale=legend_marker_scale,
+            handletextpad=legend_handletextpad)
     return fig, ax
 
 
@@ -369,7 +378,8 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
                            annotate_loc="upper left",
                            legend_fontsize=LEGEND_FONT_SIZE,
                            legend_frameon=True,
-                           scale=1.0):
+                           scale=1.0,
+                           y_num_ticks=None):
     # Pre-pass: gather residuals per dim so we can size axes adaptively.
     per_dim = []
     pooled = []
@@ -443,6 +453,8 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
 
     ax.set_xlabel(f"{str(param_type).capitalize()} error (% of frame)", fontsize=AXIS_LABEL_SIZE)
     ax.set_ylabel("Count",        fontsize=AXIS_LABEL_SIZE)
+    if y_num_ticks is not None:
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=int(y_num_ticks)))
 
     if annotate_stats and pooled:
         legend_loc = "upper right" if annotate_loc == "upper left" else "upper left"
@@ -477,13 +489,20 @@ def make_three_plots(df, param_type="centroid", fit_method="gaussian",
                      hist_y_headroom=HIST_Y_HEADROOM,
                      hist_annotate_stats=False,
                      hist_annotate_loc="upper left",
-                     scale=1.0):
+                     scale=1.0,
+                     scatter_legend_fontsize=LEGEND_FONT_SIZE,
+                     scatter_legend_marker_scale=1.0,
+                     scatter_legend_handletextpad=None,
+                     hist_y_num_ticks=None):
     clean_df, active_dims = prepare_plot_df(
         df=df, param_type=param_type, fit_method=fit_method, dims=dims,
     )
     f1, _ = plot_pred_vs_label(clean_df, param_type=param_type, fit_method=fit_method,
                                dims=active_dims, xlim=pred_gt_xlim, ylim=pred_gt_ylim,
-                               scale=scale)
+                               scale=scale,
+                               legend_fontsize=scatter_legend_fontsize,
+                               legend_marker_scale=scatter_legend_marker_scale,
+                               legend_handletextpad=scatter_legend_handletextpad)
     f2, _ = plot_residual_vs_label(clean_df, param_type=param_type, fit_method=fit_method,
                                    dims=active_dims, xlim=residual_xlim, ylim=residual_ylim,
                                    scale=scale)
@@ -494,7 +513,8 @@ def make_three_plots(df, param_type="centroid", fit_method="gaussian",
                                    y_headroom=hist_y_headroom,
                                    annotate_stats=hist_annotate_stats,
                                    annotate_loc=hist_annotate_loc,
-                                   scale=scale)
+                                   scale=scale,
+                                   y_num_ticks=hist_y_num_ticks)
     return f1, f2, f3
 
 
