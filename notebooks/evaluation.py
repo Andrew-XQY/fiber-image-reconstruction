@@ -299,7 +299,7 @@ def _pair(df, fit_method, param_type, dim):
 
 def _new_ax(scale=1.0):
     set_aps_double_column(figsize=FIGSIZE, scale=scale, legend_background=True)
-    fig, ax = plt.subplots(figsize=FIGSIZE, constrained_layout=True)
+    fig, ax = plt.subplots(constrained_layout=True)
     ax.set_box_aspect(1)
     ax.tick_params(axis="both", which="major",
                    labelsize=TICK_LABEL_SIZE,
@@ -556,7 +556,7 @@ def plot_hex_error_2d(df, param_type="centroid", gridsize=25,
         ylim = xlim
 
     set_aps_double_column(figsize=figsize, scale=scale, legend_background=True)
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots()
     ax.set_box_aspect(1)
     hb = ax.hexbin(x, y, C=mae, reduce_C_function=np.mean, gridsize=gridsize,
                    cmap=cmap, extent=(xlim[0], xlim[1], ylim[0], ylim[1]),
