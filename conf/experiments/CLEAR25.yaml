@@ -386,7 +386,7 @@ sql:
             (rn % 5) AS pos_in_grp,
             ROW_NUMBER() OVER (ORDER BY image_path) AS srn
         FROM ordered
-        WHERE (rn % 5) IN (4)
+        WHERE (rn % 5) IN (2, 4)
           AND gt_sum IS NOT NULL
           AND gt_sum >= 36000
     ),
