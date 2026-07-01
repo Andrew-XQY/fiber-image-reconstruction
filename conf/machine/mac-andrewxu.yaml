@@ -18,3 +18,7 @@ paths:
 
     processed_chromox_cropped: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Chromox_Cropped"
 
+    processed_405_background: "/Users/andrewxu/Documents/DataHub/processed/405_background"
+    processed_405_realbeam_random: "/Users/andrewxu/Documents/DataHub/processed/405_realbeam_random"
+    processed_405_realbeam_raster: "/Users/andrewxu/Documents/DataHub/processed/405_realbeam_raster"
+    processed_405_stimuation_large: "/Users/andrewxu/Documents/DataHub/processed/405_stimuation_large"

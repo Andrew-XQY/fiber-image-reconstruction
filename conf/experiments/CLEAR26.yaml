@@ -1,0 +1,238 @@
+# ====================
+# CLEAR 2026 camera-pair reconstruction configuration
+# ====================
+
+seed: &seed 42
+name: &config "CLEAR26.yaml"
+framework: "pytorch"
+file_extract: False
+note: |
+  Train on camera-separated CLEAR 2026 processed data. SQL matches camera pairs
+  by sample_id/run_id and emits "input_path|target_path". Training uses the
+  matched pairs as a cached basis for SpatialNearestCombinator; evaluation is
+  loaded from its own SQL key.
+
+paths:
+  output: ${paths.output_root}
+  processed_405_background: ${paths.datasets.processed_405_background}
+  processed_405_realbeam_random: ${paths.datasets.processed_405_realbeam_random}
+  processed_405_realbeam_raster: ${paths.datasets.processed_405_realbeam_raster}
+  processed_405_stimuation_large: ${paths.datasets.processed_405_stimuation_large}
+
+model:
+  name: "CAE"
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,   128, 128, 256, 512, 1024]
+  decoder:          [1024, 512, 256, 128, 128, 64  ]
+  apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
+  apply_dropout:    [1,    1,   0,   0,   0,   0   ]
+  final_activation: sigmoid
+
+sql:
+  clear26_cam1_to_cam2_basis: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+    ORDER BY a.sample_id;
+
+  clear26_cam1_to_cam2_eval: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+    ORDER BY a.sample_id;
+
+  clear26_cam3_to_cam2_basis: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+    ORDER BY a.sample_id;
+
+  clear26_cam3_to_cam2_eval: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+    ORDER BY a.sample_id;
+
+simulation:
+  canvas_size: [256, 256]
+  total_Guassian_num: 5
+  max_intensity: 1
+  minimum_pixel_threshold: 10.0
+  fade_rate: 0.5
+  std_1: 0.01
+  std_2: 0.03
+  distribution: "other"
+  process_functions:
+    - name: "remap_range"
+    - name: "resize"
+      params:
+        size: [23, 23]
+        interpolation: "bilinear"
+
+training:
+  epochs: &epochs 100
+  learning_rate: 1.0e-4
+  batch_size: &batch 32
+
+callbacks:
+  - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
+  - name: "torch_early_stopping"
+    params:
+      monitor: "val_loss"
+      patience: 20
+  - name: "torch_image_reconstruction_callback"
+    params:
+      save_dir: ${paths.output}
+      include_training_images: True
+
+dataset_structure:
+  db: "dataset.db"
+
+data:
+  pipeline_case: spatial_nearest_combinator
+  dataset_sources: ["processed_405_realbeam_raster", "processed_405_realbeam_random"]
+  train_sql_key: clear26_cam1_to_cam2_basis
+  eval_sql_key: clear26_cam1_to_cam2_eval
+  pattern_sql_key: clear26_cam1_to_cam2_basis
+  provider_output_column: image_pair
+  total_train_samples: 5000
+  val_test_split: 0.5
+  input_shape: &inp [256, 256]
+  output_shape: &out [256, 256]
+  transforms:
+    torch:
+      - name: "split_text"
+        params:
+          separator: "|"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "add_parent_dir"
+            - name: "add_parent_dir"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_load_image"
+            - name: "torch_load_image"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_to_tensor"
+            - name: "torch_to_tensor"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 4095.0
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 4095.0
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_clip_range"
+              params:
+                clip_min: 0.0
+                clip_max: 1.0
+            - name: "torch_clip_range"
+              params:
+                clip_min: 0.0
+                clip_max: 1.0
+  dataset_ops:
+    - name: "torch_batch"
+      params:
+        batch_size: *batch
+        shuffle: True
+        num_workers: 0
+        prefetch_factor: 2
+        seed: *seed
+
+combinator:
+  jitter_mode: global_cell
+  jitter_alpha: 1.0
+  clip_output: [0.0, 1.0]
+  transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_clip_range"
+              params:
+                clip_min: 0.0
+                clip_max: 1.0
+            - name: "torch_clip_range"
+              params:
+                clip_min: 0.0
+                clip_max: 1.0
+
+image_generator:
+  transforms:
+    - name: "split_text"
+      params:
+        separator: "|"
+    - name: "tuple_select"
+      params:
+        index: 1
+    - name: "add_parent_dir"
+    - name: "load_image"
+    - name: "to_narray"
+    - name: "to_grayscale"
+    - name: "resize"
+      params:
+        size: [23, 23]
+        interpolation: "bilinear"
+    - name: "remap_range"
+      params:
+        current_min: 0.0
+        current_max: 4095.0
+        target_min: 0.0
+        target_max: 1.0
+
+weighted_stream:
+  real_weight: 0.5
+  sgm_weight: 0.5
+
+extra_files: ["models/CAE.py"]
