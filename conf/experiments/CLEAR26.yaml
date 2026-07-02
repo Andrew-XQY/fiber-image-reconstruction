@@ -279,7 +279,7 @@ image_generator:
         interpolation: "bilinear"
 
 weighted_stream:
-  real_weight: 0.1
-  sgm_weight: 0.9
+  real_weight: 0.5
+  sgm_weight: 0.5
 
 extra_files: ["models/CAE.py"]
