@@ -14,10 +14,10 @@ note: |
 
 paths:
   output: ${paths.output_root}
-  processed_405_background: ${paths.datasets.processed_405_background}
-  processed_405_realbeam_random: ${paths.datasets.processed_405_realbeam_random}
-  processed_405_realbeam_raster: ${paths.datasets.processed_405_realbeam_raster}
-  processed_405_stimuation_large: ${paths.datasets.processed_405_stimuation_large}
+  processed_405_background: ${paths.datasets.processed_405_background_256}
+  processed_405_realbeam_random: ${paths.datasets.processed_405_realbeam_random_256}
+  processed_405_realbeam_raster: ${paths.datasets.processed_405_realbeam_raster_256}
+  processed_405_stimuation_large: ${paths.datasets.processed_405_stimuation_large_256}
 
 model:
   name: "CAE"
@@ -44,6 +44,7 @@ sql:
       AND b.camera = 'cam2'
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.75
     ORDER BY a.sample_id;
 
   clear26_cam1_to_cam2_eval: |
@@ -74,6 +75,7 @@ sql:
       AND b.camera = 'cam2'
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.75
     ORDER BY a.sample_id;
 
   clear26_cam3_to_cam2_eval: |
@@ -95,6 +97,8 @@ simulation:
   canvas_size: [256, 256]
   total_Guassian_num: 5
   max_intensity: 1
+  area_boost_scale: 0.02
+  max_peak_intensity: 255.0
   minimum_pixel_threshold: 10.0
   fade_rate: 0.5
   std_1: 0.02
@@ -104,11 +108,11 @@ simulation:
     - name: "remap_range"
     - name: "resize"
       params:
-        size: [32, 32]
+        size: [36, 36]
         interpolation: "bilinear"
     - name: "shrink_to_canvas"
       params:
-        scale: 1.0
+        scale: 0.95
         fill: 0.0
         interpolation: "bilinear"
 
@@ -164,20 +168,19 @@ data:
           transforms:
             - name: "torch_to_tensor"
             - name: "torch_to_tensor"
-      # Uncomment to subtract per-camera mean backgrounds before normalization.
-      # - name: "multi_transform"
-      #   params:
-      #     transforms:
-      #       - name: "torch_subtract_background"
-      #         params:
-      #           background_source: ${paths.processed_405_background}
-      #           camera: "cam1"
-      #           clip_min: 0.0
-      #       - name: "torch_subtract_background"
-      #         params:
-      #           background_source: ${paths.processed_405_background}
-      #           camera: "cam2"
-      #           clip_min: 0.0
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_405_background}
+                camera: "cam1"
+                clip_min: 0.0
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_405_background}
+                camera: "cam2"
+                clip_min: 0.0
       - name: "multi_transform"
         params:
           transforms:
@@ -200,6 +203,17 @@ data:
               params:
                 clip_min: 0.0
                 clip_max: 1.0
+  basis_transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.5
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.5
   dataset_ops:
     - name: "torch_batch"
       params:
@@ -240,12 +254,11 @@ image_generator:
     - name: "load_image"
     - name: "to_narray"
     - name: "to_grayscale"
-    # Uncomment to subtract the cam2 mean background from real pattern images.
-    # - name: "subtract_background"
-    #   params:
-    #     background_source: ${paths.processed_405_background}
-    #     camera: "cam2"
-    #     clip_min: 0.0
+    - name: "subtract_background"
+      params:
+        background_source: ${paths.processed_405_background}
+        camera: "cam2"
+        clip_min: 0.0
     - name: "resize"
       params:
         size: [32, 32]
