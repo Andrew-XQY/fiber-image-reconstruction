@@ -97,14 +97,19 @@ simulation:
   max_intensity: 1
   minimum_pixel_threshold: 10.0
   fade_rate: 0.5
-  std_1: 0.01
-  std_2: 0.03
+  std_1: 0.02
+  std_2: 0.08
   distribution: "other"
   process_functions:
     - name: "remap_range"
     - name: "resize"
       params:
-        size: [23, 23]
+        size: [32, 32]
+        interpolation: "bilinear"
+    - name: "shrink_to_canvas"
+      params:
+        scale: 1.0
+        fill: 0.0
         interpolation: "bilinear"
 
 training:
@@ -130,7 +135,7 @@ dataset_structure:
 
 data:
   pipeline_case: spatial_nearest_combinator
-  dataset_sources: ["processed_405_realbeam_raster", "processed_405_realbeam_random"]
+  dataset_sources: ["processed_405_stimuation_large", "processed_405_realbeam_random"]
   train_sql_key: clear26_cam1_to_cam2_basis
   eval_sql_key: clear26_cam1_to_cam2_eval
   pattern_sql_key: clear26_cam1_to_cam2_basis
@@ -159,6 +164,20 @@ data:
           transforms:
             - name: "torch_to_tensor"
             - name: "torch_to_tensor"
+      # Uncomment to subtract per-camera mean backgrounds before normalization.
+      # - name: "multi_transform"
+      #   params:
+      #     transforms:
+      #       - name: "torch_subtract_background"
+      #         params:
+      #           background_source: ${paths.processed_405_background}
+      #           camera: "cam1"
+      #           clip_min: 0.0
+      #       - name: "torch_subtract_background"
+      #         params:
+      #           background_source: ${paths.processed_405_background}
+      #           camera: "cam2"
+      #           clip_min: 0.0
       - name: "multi_transform"
         params:
           transforms:
@@ -209,6 +228,7 @@ combinator:
                 clip_max: 1.0
 
 image_generator:
+  cache_transformed: true
   transforms:
     - name: "split_text"
       params:
@@ -220,9 +240,15 @@ image_generator:
     - name: "load_image"
     - name: "to_narray"
     - name: "to_grayscale"
+    # Uncomment to subtract the cam2 mean background from real pattern images.
+    # - name: "subtract_background"
+    #   params:
+    #     background_source: ${paths.processed_405_background}
+    #     camera: "cam2"
+    #     clip_min: 0.0
     - name: "resize"
       params:
-        size: [23, 23]
+        size: [32, 32]
         interpolation: "bilinear"
     - name: "remap_range"
       params:
@@ -230,6 +256,11 @@ image_generator:
         current_max: 4095.0
         target_min: 0.0
         target_max: 1.0
+    - name: "shrink_to_canvas"
+      params:
+        scale: 1.0
+        fill: 0.0
+        interpolation: "bilinear"
 
 weighted_stream:
   real_weight: 0.5
