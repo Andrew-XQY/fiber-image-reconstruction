@@ -18,6 +18,7 @@ paths:
   processed_405_realbeam_random: ${paths.datasets.processed_405_realbeam_random_256}
   processed_405_realbeam_raster: ${paths.datasets.processed_405_realbeam_raster_256}
   processed_405_stimuation_large: ${paths.datasets.processed_405_stimuation_large_256}
+  processed_405_realbeam_eval_256: ${paths.datasets.processed_405_realbeam_eval_256}
 
 model:
   name: "CAE"
@@ -60,6 +61,7 @@ sql:
       AND b.camera = 'cam2'
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.9
     ORDER BY a.sample_id;
 
   clear26_cam3_to_cam2_basis: |
@@ -91,24 +93,25 @@ sql:
       AND b.camera = 'cam2'
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.9
     ORDER BY a.sample_id;
 
 simulation:
   canvas_size: [256, 256]
   total_Guassian_num: 5
   max_intensity: 1
-  area_boost_scale: 0.02
-  max_peak_intensity: 255.0
+  area_boost_scale: 0.25
+  max_peak_intensity: null
   minimum_pixel_threshold: 10.0
   fade_rate: 0.5
-  std_1: 0.02
-  std_2: 0.08
+  std_1: 0.05
+  std_2: 0.10
   distribution: "other"
   process_functions:
     - name: "remap_range"
     - name: "resize"
       params:
-        size: [36, 36]
+        size: [34, 34]
         interpolation: "bilinear"
     - name: "shrink_to_canvas"
       params:
@@ -139,7 +142,7 @@ dataset_structure:
 
 data:
   pipeline_case: spatial_nearest_combinator
-  dataset_sources: ["processed_405_stimuation_large", "processed_405_realbeam_random"]
+  dataset_sources: ["processed_405_stimuation_large", "processed_405_realbeam_eval_256"]
   train_sql_key: clear26_cam1_to_cam2_basis
   eval_sql_key: clear26_cam1_to_cam2_eval
   pattern_sql_key: clear26_cam1_to_cam2_basis
@@ -210,10 +213,10 @@ data:
           transforms:
             - name: "torch_scale"
               params:
-                scale_factor: 0.5
+                scale_factor: 0.4
             - name: "torch_scale"
               params:
-                scale_factor: 0.5
+                scale_factor: 0.4
   dataset_ops:
     - name: "torch_batch"
       params:
@@ -261,7 +264,7 @@ image_generator:
         clip_min: 0.0
     - name: "resize"
       params:
-        size: [32, 32]
+        size: [34, 34]
         interpolation: "bilinear"
     - name: "remap_range"
       params:
@@ -276,7 +279,7 @@ image_generator:
         interpolation: "bilinear"
 
 weighted_stream:
-  real_weight: 0.5
-  sgm_weight: 0.5
+  real_weight: 0.1
+  sgm_weight: 0.9
 
 extra_files: ["models/CAE.py"]

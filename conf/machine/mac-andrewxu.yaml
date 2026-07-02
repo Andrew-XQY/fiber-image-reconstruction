@@ -22,3 +22,4 @@ paths:
     processed_405_realbeam_random_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_realbeam_random_256"
     processed_405_realbeam_raster_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_realbeam_raster_256"
     processed_405_stimuation_large_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_stimuation_large_256"
+    processed_405_realbeam_eval_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_realbeam_eval_256"
