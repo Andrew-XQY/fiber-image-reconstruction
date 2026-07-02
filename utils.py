@@ -96,7 +96,7 @@ def build_datasets(config: dict) -> dict:
     pattern_sql_key = config["data"].get("pattern_sql_key", train_sql_key)
     train_db_path = db_paths[0]
     eval_db_path = db_paths[1] if len(db_paths) > 1 else train_db_path
-    pattern_db_path = train_db_path
+    pattern_db_path = eval_db_path
 
     train_provider = SqlProvider(
         sources={"connection": train_db_path, "sql": config["sql"][train_sql_key]},
@@ -127,6 +127,7 @@ def build_datasets(config: dict) -> dict:
         transforms=pattern_transforms,
         shuffle=False,
         seed=config["seed"],
+        cache_transformed=config["image_generator"].get("cache_transformed", False),
     )
     sgm_stream = build_sgm_stream(config)
     mixed_stream = pattern_gen.weighted_stream(
