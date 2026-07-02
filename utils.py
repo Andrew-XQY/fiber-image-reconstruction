@@ -75,6 +75,8 @@ def build_datasets(config: dict) -> dict:
             std_2=cfg["simulation"]["std_2"],
             max_intensity=cfg["simulation"]["max_intensity"],
             fade_rate=cfg["simulation"]["fade_rate"],
+            area_boost_scale=cfg["simulation"].get("area_boost_scale", 0.25),
+            max_peak_intensity=cfg["simulation"].get("max_peak_intensity"),
             distribution=cfg["simulation"]["distribution"],
         )
 
@@ -115,6 +117,15 @@ def build_datasets(config: dict) -> dict:
     train_transforms = build_transforms_from_config(
         with_parent_dir(config["data"]["transforms"]["torch"], train_db_path.parent)
     )
+    basis_transforms_config = config["data"].get("basis_transforms", {}).get(
+        "torch", []
+    )
+    if basis_transforms_config:
+        train_transforms.extend(
+            build_transforms_from_config(
+                with_parent_dir(basis_transforms_config, train_db_path.parent)
+            )
+        )
     eval_transforms = build_transforms_from_config(
         with_parent_dir(config["data"]["transforms"]["torch"], eval_db_path.parent)
     )

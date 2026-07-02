@@ -12,6 +12,11 @@ paths:
 
     processed_chromox_cropped: "/workspace/dataset/CLEAR25_Chromox_Cropped"
 
+    processed_405_background_256: "/workspace/dataset/405_background_256"
+    processed_405_realbeam_random_256: "/workspace/dataset/405_realbeam_random_256"
+    processed_405_realbeam_raster_256: "/workspace/dataset/405_realbeam_raster_256"
+    processed_405_stimuation_large_256: "/workspace/dataset/405_stimuation_large_256"
+
 
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"
 
