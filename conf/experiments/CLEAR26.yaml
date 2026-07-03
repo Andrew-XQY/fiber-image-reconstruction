@@ -184,28 +184,22 @@ data:
                 background_source: ${paths.processed_405_background}
                 camera: "cam2"
                 clip_min: 0.0
+      # Data-driven normalization (p99.5 of background-subtracted eval peaks
+      # + margin): cam1 ~1503 -> 1600, cam2 ~821 -> 900. One fixed constant
+      # per camera across basis/train/val/test preserves intensity linearity.
+      # No clip here: basis cam2 (stimulation, ~3300 counts) legitimately maps
+      # above 1; the combinator's clip_output guards final synthetic samples.
       - name: "multi_transform"
         params:
           transforms:
             - name: "torch_remap_range"
               params:
                 current_min: 0.0
-                current_max: 4095.0
+                current_max: 1600.0
             - name: "torch_remap_range"
               params:
                 current_min: 0.0
-                current_max: 4095.0
-      - name: "multi_transform"
-        params:
-          transforms:
-            - name: "torch_clip_range"
-              params:
-                clip_min: 0.0
-                clip_max: 1.0
-            - name: "torch_clip_range"
-              params:
-                clip_min: 0.0
-                clip_max: 1.0
+                current_max: 900.0
   basis_transforms:
     torch:
       - name: "multi_transform"
