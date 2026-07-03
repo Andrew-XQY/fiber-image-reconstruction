@@ -168,6 +168,7 @@ def build_datasets(config: dict) -> dict:
         ),
         num_samples=config["data"]["total_train_samples"],
         seed=config["seed"],
+        generation_batch_size=config["combinator"]["generation_batch_size"],
         eager=True,
     ).to_framework_dataset(dataset_ops=config["data"]["dataset_ops"])
     val_dataset = PyTorchPipeline(
