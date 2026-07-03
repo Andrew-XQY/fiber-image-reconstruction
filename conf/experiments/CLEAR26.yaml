@@ -229,6 +229,7 @@ data:
 combinator:
   jitter_mode: global_cell
   jitter_alpha: 1.0
+  generation_batch_size: *batch
   clip_output: [0.0, 1.0]
   transforms:
     torch:
