@@ -61,23 +61,25 @@ def build_datasets(config: dict) -> dict:
         return transforms_config
 
     def build_sgm_stream(cfg):
-        canvas = pattern_gen.DynamicPatterns(*cfg["simulation"]["canvas_size"])
+        simulation_cfg = cfg["simulation"]
+        canvas = pattern_gen.DynamicPatterns(*simulation_cfg["canvas_size"])
+        canvas.set_max_pixel_value(simulation_cfg.get("max_pixel_value", 255.0))
         canvas.set_postprocess_fns(
-            build_transforms_from_config(cfg["simulation"]["process_functions"])
+            build_transforms_from_config(simulation_cfg["process_functions"])
         )
         canvas._distributions = [
             pattern_gen.StaticGaussianDistribution(canvas)
-            for _ in range(cfg["simulation"]["total_Guassian_num"])
+            for _ in range(simulation_cfg["total_Guassian_num"])
         ]
-        canvas.set_threshold(cfg["simulation"]["minimum_pixel_threshold"])
+        canvas.set_threshold(simulation_cfg["minimum_pixel_threshold"])
         return canvas.pattern_stream(
-            std_1=cfg["simulation"]["std_1"],
-            std_2=cfg["simulation"]["std_2"],
-            max_intensity=cfg["simulation"]["max_intensity"],
-            fade_rate=cfg["simulation"]["fade_rate"],
-            area_boost_scale=cfg["simulation"].get("area_boost_scale", 0.25),
-            max_peak_intensity=cfg["simulation"].get("max_peak_intensity"),
-            distribution=cfg["simulation"]["distribution"],
+            std_1=simulation_cfg["std_1"],
+            std_2=simulation_cfg["std_2"],
+            max_intensity=simulation_cfg["max_intensity"],
+            fade_rate=simulation_cfg["fade_rate"],
+            area_boost_scale=simulation_cfg.get("area_boost_scale", 0.25),
+            max_peak_intensity=simulation_cfg.get("max_peak_intensity"),
+            distribution=simulation_cfg["distribution"],
         )
 
     # ====================================

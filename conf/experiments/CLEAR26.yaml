@@ -102,31 +102,30 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  total_Guassian_num: 5
-  max_intensity: 1
-  area_boost_scale: 0.25
+  # SGM in [0, 1], tuned to match REAL beam-pattern statistics (530 roi>=0.75
+  # patterns at 34x34: peak=0.103 sum=5.77 cells(>0.002)=219). These params
+  # give peak~0.10 sum~7.5 cells~200 blank~2-6% (verified seeds 1/7/42,
+  # 200 patterns each). Peak driven by area_boost, not max_intensity.
+  total_Guassian_num: 3
+  max_pixel_value: 1.0
+  max_intensity: 0.05
+  area_boost_scale: 0.000980392156862745
   max_peak_intensity: null
-  minimum_pixel_threshold: 10.0
-  fade_rate: 0.5
+  minimum_pixel_threshold: 0.02
+  fade_rate: 0.3
   std_1: 0.05
-  std_2: 0.10
+  std_2: 0.15
   distribution: "other"
   process_functions:
-    - name: "remap_range"
-      params:
-        current_min: 0.0
-        current_max: 255.0
-        target_min: 0.0
-        target_max: 1.0
     - name: "resize"
       params:
         size: [34, 34]
-        interpolation: "bilinear"
+        interpolation: "area"
     - name: "shrink_to_canvas"
       params:
         scale: 0.95
         fill: 0.0
-        interpolation: "bilinear"
+        interpolation: "area"
 
 training:
   epochs: &epochs 100
@@ -170,11 +169,14 @@ data:
           transforms:
             - name: "add_parent_dir"
             - name: "add_parent_dir"
+      # load_image16: PIL-based deterministic 16-bit decode, (1,H,W) int counts;
+      # raises on a silent 8-bit source. Replaces torchvision read_image, whose
+      # 16-bit PNG behavior is version-dependent.
       - name: "multi_transform"
         params:
           transforms:
-            - name: "torch_load_image"
-            - name: "torch_load_image"
+            - name: "load_image16"
+            - name: "load_image16"
       - name: "multi_transform"
         params:
           transforms:
@@ -293,7 +295,7 @@ image_generator:
         interpolation: "bilinear"
 
 weighted_stream:
-  real_weight: 1.0
-  sgm_weight: 0.0
+  real_weight: 0.7
+  sgm_weight: 0.3
 
 extra_files: ["models/CAE.py"]
