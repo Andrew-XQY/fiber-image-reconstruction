@@ -90,6 +90,11 @@ if any(win in machine for win in ["win", "windows"]): # windows
             "Model_trained_on_DMD_orth_SGM_inLab_150MB": "C:/Users/qiyuanxu/Desktop/Models/Model_trained_on_DMD_orth_SGM_inLab_150MB/model.pt",
             
             "baseline_random_predict": "C:/Users/qiyuanxu/Desktop/Models/baseline_random_predict/model.pt",
+            
+            
+
+            
+            
         },
         
         "save": {
@@ -128,6 +133,10 @@ elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
         "globel_save_to": "/Users/andrewxu/Desktop/",
         "temp_save_to": "/Users/andrewxu/Desktop/Output/",
         
+        "models": {
+            "root": "/Users/andrewxu/Desktop/Models/",
+            "405_laser_realbeam_prior": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26-20260703153138/model.pt",
+        },
         "DMD_cockcroft": {
             "dataset_db_dir": "/Users/andrewxu/Documents/DataHub/local_images/backup/2024-08-15/db/dataset_meta.db",
             "dataset_extracted_dir": "/Users/andrewxu/Documents/DataHub/local_images/backup/2024-08-15/"
@@ -167,7 +176,13 @@ elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
         "YAG_Laser_only": {
             "output_dataset_dir": "/Users/andrewxu/Desktop/CLEAR25_Yag_Laser/dataset/",
             "output_db_dir": "/Users/andrewxu/Desktop/CLEAR25_Yag_Laser/db/dataset_meta.db",
-        }
+        },
+        
+        "save": {
+            "model_inference": {
+                "405_laser_realbeam_prior": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26-20260703153138/inference/",
+            },
+        }   
     }
 
 else:
