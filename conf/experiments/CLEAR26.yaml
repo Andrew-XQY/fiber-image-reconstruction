@@ -46,6 +46,7 @@ sql:
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
       AND b.roi_energy_fraction >= 0.75
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
     ORDER BY a.sample_id;
 
   clear26_cam1_to_cam2_eval: |
@@ -62,6 +63,7 @@ sql:
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
       AND b.roi_energy_fraction >= 0.9
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
     ORDER BY a.sample_id;
 
   clear26_cam3_to_cam2_basis: |
@@ -78,6 +80,7 @@ sql:
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
       AND b.roi_energy_fraction >= 0.75
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
     ORDER BY a.sample_id;
 
   clear26_cam3_to_cam2_eval: |
@@ -94,6 +97,7 @@ sql:
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
       AND b.roi_energy_fraction >= 0.9
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
     ORDER BY a.sample_id;
 
 simulation:
@@ -109,6 +113,11 @@ simulation:
   distribution: "other"
   process_functions:
     - name: "remap_range"
+      params:
+        current_min: 0.0
+        current_max: 255.0
+        target_min: 0.0
+        target_max: 1.0
     - name: "resize"
       params:
         size: [34, 34]
@@ -207,10 +216,10 @@ data:
           transforms:
             - name: "torch_scale"
               params:
-                scale_factor: 0.4
+                scale_factor: 0.26
             - name: "torch_scale"
               params:
-                scale_factor: 0.4
+                scale_factor: 0.26
   dataset_ops:
     - name: "torch_batch"
       params:
@@ -227,13 +236,23 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
+      # Input slot: measured sensor-noise domain randomization. a/b from the
+      # SPATIAL noise gap between real eval cam1 frames and clean synthetic
+      # combos (affine fit, verified per-level match 0.8-1.1x). Temporal
+      # photon-transfer gave a~0.18 (upper bound; binning correlates pixels) -
+      # param_jitter 2.0 spans both. count_scale = the /1600 remap; clip_min 0
+      # replicates bg-subtraction truncation. Target slot: clip only.
       - name: "multi_transform"
         params:
           transforms:
-            - name: "torch_clip_range"
+            - name: "torch_sensor_noise"
               params:
+                a: 0.106
+                b: 2.81
+                count_scale: 1600.0
+                param_jitter: 2.0
+                gain: null
                 clip_min: 0.0
-                clip_max: 1.0
             - name: "torch_clip_range"
               params:
                 clip_min: 0.0
@@ -260,7 +279,7 @@ image_generator:
     - name: "resize"
       params:
         size: [34, 34]
-        interpolation: "bilinear"
+        interpolation: "area"
     - name: "remap_range"
       params:
         current_min: 0.0
