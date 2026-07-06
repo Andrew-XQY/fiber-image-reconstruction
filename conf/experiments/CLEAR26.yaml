@@ -213,6 +213,19 @@ data:
                 current_max: 900.0
   basis_transforms:
     torch:
+      # OPTIONAL sharp-kernel targets: replaces each basis cam2 spot image
+      # (measured sigma ~6.4px) with an energy-preserving Gaussian (sigma 4.0)
+      # at its centroid, so assembled targets are the true distribution, not
+      # distribution*spot (-> removes the measured +7-8% size over-prediction).
+      # Probe-verified: width ratio 1.007, ripple ~ real, 0.26 calibration holds.
+      # Input slot untouched (null). COMMENT OUT THIS BLOCK to revert.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - null
+            - name: "torch_render_centroid_kernel"
+              params:
+                sigma: 4.0
       - name: "multi_transform"
         params:
           transforms:
