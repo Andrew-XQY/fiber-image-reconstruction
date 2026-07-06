@@ -51,6 +51,8 @@ def build_datasets(config: dict) -> dict:
 
         def apply(items):
             for t in items:
+                if not isinstance(t, dict):
+                    continue  # null = pass-through slot in multi_transform
                 if t.get("name") == "add_parent_dir":
                     t.setdefault("params", {})["parent_dir"] = str(parent_dir)
                 child_transforms = t.get("params", {}).get("transforms")
