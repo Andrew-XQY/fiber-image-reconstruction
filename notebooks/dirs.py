@@ -141,6 +141,7 @@ elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
             "clear26_20260706201542": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26-20260706201542/model.pt",
             "CLEAR26-20260706201542": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26-20260706201542/model.pt",
             "CLEAR26_cam3-20260707072006": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26_cam3-20260707072006/model.pt",
+            "405_cam1_pure_SMG": "/Users/andrewxu/Desktop/HPC/temp/405_cam1_pure_SMG/model.pt",
         },
         "DMD_cockcroft": {
             "dataset_db_dir": "/Users/andrewxu/Documents/DataHub/local_images/backup/2024-08-15/db/dataset_meta.db",
@@ -191,6 +192,7 @@ elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
                 "clear26_20260706201542": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26-20260706201542/inference/",
                 "CLEAR26-20260706201542": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26-20260706201542/inference/",
                 "CLEAR26_cam3-20260707072006": "/Users/andrewxu/Desktop/HPC/temp/CLEAR26_cam3-20260707072006/inference/",
+                "405_cam1_pure_SMG": "/Users/andrewxu/Desktop/HPC/temp/405_cam1_pure_SMG/inference/",
             },
         }   
     }
