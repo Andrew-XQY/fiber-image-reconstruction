@@ -1,0 +1,322 @@
+# ====================
+# CLEAR 2026 camera-pair reconstruction - cam1, PURE SGM label space
+# Derived from CLEAR26.yaml. Differences: weighted_stream 0.0/1.0 (no real
+# beam patterns in training -> ZERO target-shape leakage by construction;
+# eval numbers are publication-clean on the full eval set) and the SGM
+# simulation block retuned to SPAN the real pattern distribution instead of
+# matching its median (probe 2026-07-06): single Gaussian (n=1, like real
+# beams), sigma p10-p90 ~ 15-43 px vs real 18-45, peak follows the physical
+# constant-energy locus (0.13 at sigma<20 down to ~0.03 at sigma>30),
+# blanks 2-4%. Run with: EXPERIMENT_CONFIG=CLEAR26_sgm
+# ====================
+
+seed: &seed 42
+name: &config "CLEAR26_sgm.yaml"
+framework: "pytorch"
+file_extract: False
+note: |
+  Train on camera-separated CLEAR 2026 processed data. SQL matches camera pairs
+  by sample_id/run_id and emits "input_path|target_path". Training uses the
+  matched pairs as a cached basis for SpatialNearestCombinator; evaluation is
+  loaded from its own SQL key.
+
+paths:
+  output: ${paths.output_root}
+  processed_405_background: ${paths.datasets.processed_405_background_256}
+  processed_405_realbeam_random: ${paths.datasets.processed_405_realbeam_random_256}
+  processed_405_realbeam_raster: ${paths.datasets.processed_405_realbeam_raster_256}
+  processed_405_stimuation_large: ${paths.datasets.processed_405_stimuation_large_256}
+  processed_405_realbeam_eval_256: ${paths.datasets.processed_405_realbeam_eval_256}
+
+model:
+  name: "CAE"
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,   128, 128, 256, 512, 1024]
+  decoder:          [1024, 512, 256, 128, 128, 64  ]
+  apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
+  apply_dropout:    [1,    1,   0,   0,   0,   0   ]
+  final_activation: sigmoid
+
+sql:
+  clear26_cam1_to_cam2_basis: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.75
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+  clear26_cam1_to_cam2_eval: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.9
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+  clear26_cam3_to_cam2_basis: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.75
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+  clear26_cam3_to_cam2_eval: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.9
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+simulation:
+  canvas_size: [256, 256]
+  # PURE-SGM tuning: single blob (real beams are single), size range spans
+  # the full real distribution (sigma 15-43 px), intensity follows the
+  # constant-energy locus via area_boost (peak ~ 1/sigma^2). fade 0.02 keeps
+  # blanks at 2-4%. Verified seeds 1/7/42 vs real locus per size bin.
+  total_Guassian_num: 1
+  max_pixel_value: 1.0
+  max_intensity: 0.02
+  area_boost_scale: 0.0015
+  max_peak_intensity: null
+  minimum_pixel_threshold: 0.005
+  fade_rate: 0.02
+  std_1: 0.05
+  std_2: 0.22
+  distribution: "other"
+  process_functions:
+    - name: "resize"
+      params:
+        size: [34, 34]
+        interpolation: "area"
+    - name: "shrink_to_canvas"
+      params:
+        scale: 0.95
+        fill: 0.0
+        interpolation: "area"
+
+training:
+  epochs: &epochs 100
+  learning_rate: 1.0e-4
+  batch_size: &batch 32
+
+callbacks:
+  - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
+  - name: "torch_early_stopping"
+    params:
+      monitor: "val_loss"
+      patience: 20
+  - name: "torch_image_reconstruction_callback"
+    params:
+      save_dir: ${paths.output}
+      include_training_images: True
+
+dataset_structure:
+  db: "dataset.db"
+
+data:
+  pipeline_case: spatial_nearest_combinator
+  dataset_sources: ["processed_405_stimuation_large", "processed_405_realbeam_eval_256"]
+  train_sql_key: clear26_cam1_to_cam2_basis
+  eval_sql_key: clear26_cam1_to_cam2_eval
+  pattern_sql_key: clear26_cam1_to_cam2_basis
+  provider_output_column: image_pair
+  total_train_samples: 5000
+  val_test_split: 0.5
+  input_shape: &inp [256, 256]
+  output_shape: &out [256, 256]
+  transforms:
+    torch:
+      - name: "split_text"
+        params:
+          separator: "|"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "add_parent_dir"
+            - name: "add_parent_dir"
+      # load_image16: PIL-based deterministic 16-bit decode, (1,H,W) int counts;
+      # raises on a silent 8-bit source. Replaces torchvision read_image, whose
+      # 16-bit PNG behavior is version-dependent.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "load_image16"
+            - name: "load_image16"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_to_tensor"
+            - name: "torch_to_tensor"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_405_background}
+                camera: "cam1"
+                clip_min: 0.0
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_405_background}
+                camera: "cam2"
+                clip_min: 0.0
+      # Data-driven normalization (p99.5 of background-subtracted eval peaks
+      # + margin): cam1 ~1503 -> 1600, cam2 ~821 -> 900. One fixed constant
+      # per camera across basis/train/val/test preserves intensity linearity.
+      # No clip here: basis cam2 (stimulation, ~3300 counts) legitimately maps
+      # above 1; the combinator's clip_output guards final synthetic samples.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 1600.0
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 900.0
+  basis_transforms:
+    torch:
+      # OPTIONAL sharp-kernel targets: replaces each basis cam2 spot image
+      # (measured sigma ~6.4px) with an energy-preserving Gaussian (sigma 4.0)
+      # at its centroid, so assembled targets are the true distribution, not
+      # distribution*spot (-> removes the measured +7-8% size over-prediction).
+      # Probe-verified: width ratio 1.007, ripple ~ real, 0.26 calibration holds.
+      # Input slot untouched (null). COMMENT OUT THIS BLOCK to revert.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - null
+            - name: "torch_render_centroid_kernel"
+              params:
+                sigma: 4.0
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.26
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.26
+  dataset_ops:
+    - name: "torch_batch"
+      params:
+        batch_size: *batch
+        shuffle: True
+        num_workers: 0
+        prefetch_factor: 2
+        seed: *seed
+
+combinator:
+  jitter_mode: global_cell
+  jitter_alpha: 1.0
+  generation_batch_size: *batch
+  clip_output: [0.0, 1.0]
+  transforms:
+    torch:
+      # Input slot: measured sensor-noise domain randomization. a/b from the
+      # SPATIAL noise gap between real eval cam1 frames and clean synthetic
+      # combos (affine fit, verified per-level match 0.8-1.1x). Temporal
+      # photon-transfer gave a~0.18 (upper bound; binning correlates pixels) -
+      # param_jitter 2.0 spans both. count_scale = the /1600 remap; clip_min 0
+      # replicates bg-subtraction truncation. Target slot: clip only.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_sensor_noise"
+              params:
+                a: 0.106
+                b: 2.81
+                count_scale: 1600.0
+                param_jitter: 2.0
+                gain: null
+                clip_min: 0.0
+            - name: "torch_clip_range"
+              params:
+                clip_min: 0.0
+                clip_max: 1.0
+
+image_generator:
+  cache_transformed: true
+  transforms:
+    - name: "split_text"
+      params:
+        separator: "|"
+    - name: "tuple_select"
+      params:
+        index: 1
+    - name: "add_parent_dir"
+    - name: "load_image"
+    - name: "to_narray"
+    - name: "to_grayscale"
+    - name: "subtract_background"
+      params:
+        background_source: ${paths.processed_405_background}
+        camera: "cam2"
+        clip_min: 0.0
+    - name: "resize"
+      params:
+        size: [34, 34]
+        interpolation: "area"
+    - name: "remap_range"
+      params:
+        current_min: 0.0
+        current_max: 4095.0
+        target_min: 0.0
+        target_max: 1.0
+    - name: "shrink_to_canvas"
+      params:
+        scale: 1.0
+        fill: 0.0
+        interpolation: "bilinear"
+
+weighted_stream:
+  real_weight: 0.0
+  sgm_weight: 1.0
+
+extra_files: ["models/CAE.py"]
