@@ -17,7 +17,7 @@ def main():
     # Configuration
     # ========================================
     # Create experiment output directory  (timestamped)
-    experiment_name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26")
+    experiment_name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_cam3")
     folder_name = f"{experiment_name}-{datetime.now():%Y%m%d%H%M%S}"
     config_manager = ConfigManager(
         load_config(
