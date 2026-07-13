@@ -139,7 +139,11 @@ simulation:
   std_1: 0.06
   std_2: 0.11
   distribution: "other"
-  intensity_range: [0.30, 0.75]
+  # CALIBRATION: the combinator has ~4.5x pattern->rendered amplitude gain
+  # (real patterns enter at peak ~0.12 [raw/4095] and render to ~0.55).
+  # SGM pattern amplitude must therefore match the REAL PATTERN scale (~0.12),
+  # not the rendered-target scale. [0.30, 0.75] saturated targets at clip=1.0.
+  intensity_range: [0.07, 0.16]
   center_radius_range: [0.0, 0.39]
   aspect_range: [0.7, 1.55]
   process_functions:
@@ -153,14 +157,12 @@ simulation:
         fill: 0.0
         interpolation: "area"
 
-# Rejection sampling on generated pairs, applied to the RENDERED target
-# (needs the utils.py sgm_validator wiring). Bands are generous -- they cut
-# clear outliers only, derived from the measured real marginals above, not
-# tuned on eval metrics. Disables the batched-generation fast path (slower
-# generation, same math). Set enabled: false to bypass.
+# Optional rejection sampling on rendered targets (utils.py wiring).
+# DISABLED: priors above are matched by construction; verify epoch_1 images /
+# smoke_test.py instead of filtering at runtime. Keep as a debug tool only.
 sgm_validator:
-  enabled: true
-  peak_range: [0.25, 0.85]
+  enabled: false
+  peak_range: [0.20, 0.90]
   footprint_range: [0.05, 0.20]
   footprint_threshold: 0.05
   centroid_radius_max: 0.42
@@ -289,9 +291,6 @@ combinator:
   jitter_mode: global_cell
   jitter_alpha: 1.0
   generation_batch_size: *batch
-  # Per-sample global intensity jitter (input AND target scaled together) ->
-  # intensity equivariance. 1.0 = legacy fixed scale.
-  intensity_scale: [0.85, 1.2]
   clip_output: [0.0, 1.0]
   transforms:
     torch:

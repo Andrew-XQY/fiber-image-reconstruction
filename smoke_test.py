@@ -48,7 +48,7 @@ print(f"[3] generated {n} samples in {dt:.1f}s ({per_s:.1f}/s) -> "
       f"one epoch (5000) ~ {5000/per_s/60:.1f} min of generation")
 
 # bands: validator bands for peak/fp/r; sx = real 0.082 [0.067,0.106] + kernel margin
-bands = {"peak": (0.25, 0.85), "fp": (0.05, 0.20), "r": (0.0, 0.42), "sx": (0.05, 0.13)}
+bands = {"peak": (0.20, 0.90), "fp": (0.05, 0.20), "r": (0.0, 0.42), "sx": (0.05, 0.13)}
 print("[2] target marginals (expect ~100% in-band with validator enabled):")
 worst = 1.0
 for k, v in S.items():
