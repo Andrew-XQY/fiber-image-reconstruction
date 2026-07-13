@@ -11,6 +11,7 @@ from xflow.utils import resolve_resource_dir
 
 from xflow.extensions.physics.pipeline import (
     CachedBasisPipeline,
+    RetryPolicy,
     SpatialNearestCombinator,
     make_centroid_position_extractor,
 )
@@ -37,6 +38,38 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
         p = p.with_name(p.stem)
     resolve_resource_dir(str(p))  # folder exists OR extract same-name archive
     return p
+
+
+# Rejection-sampling quality gate for generated (input, target) pairs, applied
+# to the RENDERED target. Bands come from independent/measured beam statistics,
+# NOT tuned on eval metrics. Config section: sgm_validator (see yaml).
+def make_beam_target_validator(cfg: dict):
+    peak_lo, peak_hi = cfg.get("peak_range", (0.0, 1.0))
+    fp_lo, fp_hi = cfg.get("footprint_range", (0.0, 1.0))
+    fp_thr = float(cfg.get("footprint_threshold", 0.05))
+    r_max = float(cfg.get("centroid_radius_max", 1.0))
+
+    def validator(sample, record):
+        tgt = np.asarray(sample[1] if isinstance(sample, (tuple, list)) else sample)
+        tgt = np.squeeze(tgt)
+        peak = float(tgt.max())
+        if not (peak_lo <= peak <= peak_hi):
+            return (False, f"peak {peak:.3f} outside [{peak_lo}, {peak_hi}]")
+        fp = float((tgt > fp_thr).mean())
+        if not (fp_lo <= fp <= fp_hi):
+            return (False, f"footprint {fp:.3f} outside [{fp_lo}, {fp_hi}]")
+        s = float(tgt.sum())
+        if s > 0 and r_max < 1.0:
+            h, w = tgt.shape[-2:]
+            ys, xs = np.mgrid[0:h, 0:w]
+            cx = float((xs * tgt).sum()) / s / w
+            cy = float((ys * tgt).sum()) / s / h
+            r = math.hypot(cx - 0.5, cy - 0.5)
+            if r > r_max:
+                return (False, f"centroid r {r:.3f} > {r_max}")
+        return True
+
+    return validator
 
 
 def build_datasets(config: dict) -> dict:
@@ -74,6 +107,13 @@ def build_datasets(config: dict) -> dict:
             for _ in range(simulation_cfg["total_Guassian_num"])
         ]
         canvas.set_threshold(simulation_cfg["minimum_pixel_threshold"])
+
+        # Optional config-driven priors; None -> legacy hardcoded behavior.
+        # Requires xflow >= the pattern_gen patch adding these kwargs.
+        def _as_range(key):
+            v = simulation_cfg.get(key)
+            return tuple(v) if v is not None else None
+
         return canvas.pattern_stream(
             std_1=simulation_cfg["std_1"],
             std_2=simulation_cfg["std_2"],
@@ -82,6 +122,9 @@ def build_datasets(config: dict) -> dict:
             area_boost_scale=simulation_cfg.get("area_boost_scale", 0.25),
             max_peak_intensity=simulation_cfg.get("max_peak_intensity"),
             distribution=simulation_cfg["distribution"],
+            intensity_range=_as_range("intensity_range"),
+            center_radius_range=_as_range("center_radius_range"),
+            aspect_range=_as_range("aspect_range"),
         )
 
     # ====================================
@@ -153,15 +196,38 @@ def build_datasets(config: dict) -> dict:
         ],
         seed=config["seed"],
     )
+    # Optional per-sample global intensity jitter (input AND target scaled
+    # together) -> intensity equivariance. Scalar or [lo, hi]; 1.0 = legacy.
+    intensity_scale = config["combinator"].get("intensity_scale", 1.0)
+    if isinstance(intensity_scale, (list, tuple)):
+        intensity_scale = tuple(float(v) for v in intensity_scale)
+    else:
+        intensity_scale = float(intensity_scale)
+
     combinator = SpatialNearestCombinator(
         pattern_provider=mixed_stream,
         skip_zero=True,
         eps=1e-8,
         jitter_mode=config["combinator"].get("jitter_mode", "global_cell"),
         jitter_alpha=config["combinator"].get("jitter_alpha", 1.0),
+        intensity_scale=intensity_scale,
         clip_output=tuple(config["combinator"].get("clip_output", (0.0, 1.0))),
         transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
     )
+
+    # Optional rejection sampling on generated pairs (see make_beam_target_validator).
+    # NOTE: a validator disables the batched-generation fast path in
+    # CachedBasisPipeline (per-sample generation instead) -- slower, same math.
+    validator_cfg = config.get("sgm_validator") or {}
+    sample_validator = None
+    retry_policy = None
+    if validator_cfg.get("enabled", False):
+        sample_validator = make_beam_target_validator(validator_cfg)
+        retry_policy = RetryPolicy(
+            max_retries=int(validator_cfg.get("max_retries", 20)),
+            on_exhausted="yield_last",  # never raise mid-epoch from __getitem__
+        )
+
     train_dataset = CachedBasisPipeline(
         train_provider,
         combinator=combinator,
@@ -173,6 +239,8 @@ def build_datasets(config: dict) -> dict:
         num_samples=config["data"]["total_train_samples"],
         seed=config["seed"],
         generation_batch_size=config["combinator"]["generation_batch_size"],
+        sample_validator=sample_validator,
+        retry_policy=retry_policy,
         eager=True,
     ).to_framework_dataset(dataset_ops=config["data"]["dataset_ops"])
     val_dataset = PyTorchPipeline(

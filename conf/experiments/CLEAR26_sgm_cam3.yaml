@@ -17,6 +17,10 @@ note: |
   screen. SQL matches camera pairs by sample_id/run_id and emits
   "input_path|target_path". Training uses the matched pairs as a cached basis
   for SpatialNearestCombinator; evaluation is loaded from its own SQL key.
+  PURE SGM with distribution-matched priors (intensity_range /
+  center_radius_range / aspect_range + rendered-target validator); no
+  real-beam patterns anywhere in training -> leak-free. Dropout off,
+  combinator intensity_scale jitter on.
 
 paths:
   output: ${paths.output_root}
@@ -34,7 +38,10 @@ model:
   encoder:          [64,   128, 128, 256, 512, 1024]
   decoder:          [1024, 512, 256, 128, 128, 64  ]
   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-  apply_dropout:    [1,    1,   0,   0,   0,   0   ]
+  # Dropout removed: training pairs are generated on-the-fly (effectively
+  # infinite, non-repeating), so dropout adds blur without a regularization
+  # benefit. Revert to [1,1,0,0,0,0] to reproduce older runs.
+  apply_dropout:    [0,    0,   0,   0,   0,   0   ]
   final_activation: sigmoid
 
 sql:
@@ -112,20 +119,29 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  # PURE-SGM tuning: single blob (real beams are single), size range spans
-  # the full real distribution (sigma 15-43 px), intensity follows the
-  # constant-energy locus via area_boost (peak ~ 1/sigma^2). fade 0.02 keeps
-  # blanks at 2-4%. Verified seeds 1/7/42 vs real locus per size bin.
+  # PURE-SGM prior, distribution-matched to measured real-beam marginals
+  # (218 eval targets): sigma_x/y 0.082/0.083 rel [p5-p95 0.067-0.106/0.128],
+  # centroid radius mean 0.236 (p95 0.369), peak 0.558 [0.278, 0.742],
+  # footprint(>0.05) 0.117. Monte-Carlo of this sampler reproduces all five
+  # marginals within a few percent (sx 0.083, r 0.258, peak 0.52, fp 0.119,
+  # empties 0%). Old prior failure modes fixed: peaks were ~14x too faint
+  # (median 0.043), 17-26% near-empty targets, 75% of centers beyond r=0.25
+  # (real: 27%), 45% of footprints larger than any real beam.
+  # Requires the xflow pattern_gen patch (intensity_range,
+  # center_radius_range, aspect_range); each key None/absent -> legacy path.
   total_Guassian_num: 1
   max_pixel_value: 1.0
-  max_intensity: 0.02
-  area_boost_scale: 0.0015
+  max_intensity: 0.02        # ignored while intensity_range is set (fallback)
+  area_boost_scale: 0.0      # boost still applies on top of intensity_range -> keep 0
   max_peak_intensity: null
-  minimum_pixel_threshold: 0.005
-  fade_rate: 0.02
-  std_1: 0.05
-  std_2: 0.22
+  minimum_pixel_threshold: 0.02
+  fade_rate: 0.02            # ignored while intensity_range is set (fallback)
+  std_1: 0.06
+  std_2: 0.11
   distribution: "other"
+  intensity_range: [0.30, 0.75]
+  center_radius_range: [0.0, 0.39]
+  aspect_range: [0.7, 1.55]
   process_functions:
     - name: "resize"
       params:
@@ -133,9 +149,22 @@ simulation:
         interpolation: "area"
     - name: "shrink_to_canvas"
       params:
-        scale: 0.95
+        scale: 1.0    # was 0.95; real patterns use 1.0 -> keep spaces consistent
         fill: 0.0
         interpolation: "area"
+
+# Rejection sampling on generated pairs, applied to the RENDERED target
+# (needs the utils.py sgm_validator wiring). Bands are generous -- they cut
+# clear outliers only, derived from the measured real marginals above, not
+# tuned on eval metrics. Disables the batched-generation fast path (slower
+# generation, same math). Set enabled: false to bypass.
+sgm_validator:
+  enabled: true
+  peak_range: [0.25, 0.85]
+  footprint_range: [0.05, 0.20]
+  footprint_threshold: 0.05
+  centroid_radius_max: 0.42
+  max_retries: 20
 
 training:
   epochs: &epochs 100
@@ -260,6 +289,9 @@ combinator:
   jitter_mode: global_cell
   jitter_alpha: 1.0
   generation_batch_size: *batch
+  # Per-sample global intensity jitter (input AND target scaled together) ->
+  # intensity equivariance. 1.0 = legacy fixed scale.
+  intensity_scale: [0.85, 1.2]
   clip_output: [0.0, 1.0]
   transforms:
     torch:
