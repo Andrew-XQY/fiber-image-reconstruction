@@ -85,6 +85,8 @@ sql:
       AND b.camera = 'cam2'
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
       AND b.roi_energy_fraction >= 0.75
       AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
     ORDER BY a.sample_id;
@@ -102,6 +104,8 @@ sql:
       AND b.camera = 'cam2'
       AND a.png_path IS NOT NULL
       AND b.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
       AND b.roi_energy_fraction >= 0.9
       AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
     ORDER BY a.sample_id;
