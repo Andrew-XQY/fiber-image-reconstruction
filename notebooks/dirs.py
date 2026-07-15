@@ -69,56 +69,7 @@ if any(win in machine for win in ["win", "windows"]): # windows
             "output_dataset_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Yag_Laser/dataset/",
             "output_db_dir": "C:/Users/qiyuanxu/Desktop/CLEAR25_Yag_Laser/db/dataset_meta.db",
         },
-        
-        "models": {
-            "root": "C:/Users/qiyuanxu/Desktop/Models/",
-            "chromox_cropped_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_sgm/model.pt",
-            "chromox_cropped_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan/model.pt",
-            "chromox_cropped_cae_random_scan_leakless": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan_leakless/model.pt",
-            "chromox_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cae_random_scan/model.pt",
-            "clear_dmd_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/clear_dmd_cae_line_scan_sgm/model.pt",
-            "chromox_cropped_cae_line_scan_real_beam_image": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_real_beam_image/model.pt",
-            "chromox_cropped_cae_line_scan_mixture": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture/model.pt",
-            "chromox_cropped_cae_line_scan_mixture_prab_model": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture_prab_model/model.pt",
-            "chromox_cropped_TM_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_TM_line_scan/model.pt",
-            "chromox_cropped_cae_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan/model.pt",
-            "chromox_cropped_cae_line_scan_single_sample": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_single_sample/model.pt",
-            
-            "Model_trained_on_CHROMOX_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_only/model.pt",
-            "Model_trained_on_CHROMOX_LASER_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_LASER_only/model.pt",
-    
-            "Model_trained_on_DMD_orth_SGM_inLab_150MB": "C:/Users/qiyuanxu/Desktop/Models/Model_trained_on_DMD_orth_SGM_inLab_150MB/model.pt",
-            
-            "baseline_random_predict": "C:/Users/qiyuanxu/Desktop/Models/baseline_random_predict/model.pt",
-            
-            
-
-            
-            
-        },
-        
-        "save": {
-            "model_inference": {
-                "chromox_cropped_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_sgm/inference/",
-                "chromox_cropped_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan/inference/",
-                "chromox_cropped_cae_random_scan_leakless": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_random_scan_leakless/inference/",
-                "chromox_cae_random_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cae_random_scan/inference/",
-                "clear_dmd_cae_line_scan_sgm": "C:/Users/qiyuanxu/Desktop/Models/clear_dmd_cae_line_scan_sgm/inference/",
-                "chromox_cropped_cae_line_scan_real_beam_image": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_real_beam_image/inference/",
-                "chromox_cropped_cae_line_scan_mixture": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture/inference/",
-                "chromox_cropped_cae_line_scan_mixture_prab_model": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_mixture_prab_model/inference/",
-                "chromox_cropped_TM_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_TM_line_scan/inference/",
-                "chromox_cropped_cae_line_scan": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan/inference/",
-                "chromox_cropped_cae_line_scan_single_sample": "C:/Users/qiyuanxu/Desktop/Models/chromox_cropped_cae_line_scan_single_sample/inference/",
-                
-                "Model_trained_on_CHROMOX_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_only/inference/",
-                "Model_trained_on_CHROMOX_LASER_only": "C:/Users/qiyuanxu/Desktop/Models/Scope 1 cross field/Model_trained_on_CHROMOX_LASER_only/inference/",
-                
-                "Model_trained_on_DMD_orth_SGM_inLab_150MB": "C:/Users/qiyuanxu/Desktop/Models/Model_trained_on_DMD_orth_SGM_inLab_150MB/inference/",
-                
-                "baseline_random_predict": "C:/Users/qiyuanxu/Desktop/Models/baseline_random_predict/inference/",
-                },
-        }
+        "run_roots": ["C:/Users/qiyuanxu/Desktop/Models"],
             
     }
 
