@@ -17,7 +17,7 @@ def main():
     # Configuration
     # ========================================
     # Create experiment output directory  (timestamped)
-    experiment_name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_sgm_cam3_nnls")
+    experiment_name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_sgm_cam1")
     folder_name = f"{experiment_name}-{datetime.now():%Y%m%d%H%M%S}"
     config_manager = ConfigManager(
         load_config(
@@ -37,15 +37,6 @@ def main():
     # need to manually resolve all complexity in utils, in here just interface to build final variables needed.
     # Mainly just change providers, the pipelines are decoupled.
     # ========================================
-    pipeline_case = config["data"].get(
-        "pipeline_case", "spatial_nearest_combinator"
-    )
-    if pipeline_case not in {
-        "spatial_nearest_combinator",
-        "nnls_coefficient_map",
-    }:
-        raise ValueError(f"Unsupported data.pipeline_case: {pipeline_case!r}")
-    print("Dataset pipeline:", pipeline_case)
     dataset_bundle = build_datasets(config)
     train_provider = dataset_bundle["train_provider"]
     val_provider = dataset_bundle["val_provider"]

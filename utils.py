@@ -15,7 +15,6 @@ from xflow.extensions.physics.pipeline import (
     SpatialNearestCombinator,
     make_centroid_position_extractor,
 )
-from xflow.extensions.physics.nnls_pipeline import NNLSCoefficientMapCombinator
 from xflow.extensions.physics import pattern_gen
 
 SAMPLE_FLATTENED = ['SHL_DNN']
@@ -131,22 +130,15 @@ def build_datasets(config: dict) -> dict:
     # ====================================
     # Case 2 :single dataset (source).
     # ====================================
-    # Disabled for CLEAR26. Case 3 / 3-b below is the active application path.
+    # Disabled for CLEAR26. Case 3-b below is the active application path.
 
-    pipeline_case = config["data"].get("pipeline_case", "spatial_nearest_combinator")
-    supported_pipeline_cases = {
-        "spatial_nearest_combinator",
-        "nnls_coefficient_map",
-    }
-    if pipeline_case not in supported_pipeline_cases:
+    if config["data"].get("pipeline_case") != "spatial_nearest_combinator":
         raise ValueError(
-            f"Unsupported dataset pipeline {pipeline_case!r}. Expected one of "
-            f"{sorted(supported_pipeline_cases)}."
+            "Unsupported dataset pipeline. Set data.pipeline_case: spatial_nearest_combinator for Case 3-b."
         )
 
     # ====================================
-    # Case 3: existing nearest-neighbor path; Case 3-b: NNLS coefficient-map path.
-    # Both use the same mixed (real images + SGM) pattern stream and data conventions.
+    # Case 3-b: Nearest-neighbor combinator + mixed (real images + SGM) pattern stream.
     # ====================================
     train_sql_key = config["data"]["train_sql_key"]
     eval_sql_key = config["data"]["eval_sql_key"]
@@ -212,39 +204,16 @@ def build_datasets(config: dict) -> dict:
     else:
         intensity_scale = float(intensity_scale)
 
-    combinator_transforms = build_transforms_from_config(
-        config["combinator"]["transforms"]["torch"]
+    combinator = SpatialNearestCombinator(
+        pattern_provider=mixed_stream,
+        skip_zero=True,
+        eps=1e-8,
+        jitter_mode=config["combinator"].get("jitter_mode", "global_cell"),
+        jitter_alpha=config["combinator"].get("jitter_alpha", 1.0),
+        intensity_scale=intensity_scale,
+        clip_output=tuple(config["combinator"].get("clip_output", (0.0, 1.0))),
+        transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
     )
-    clip_output = tuple(config["combinator"].get("clip_output", (0.0, 1.0)))
-    if pipeline_case == "nnls_coefficient_map":
-        # Case 3-b: fit non-negative basis coefficients to each target map.
-        nnls_cfg = config.get("nnls") or {}
-        combinator = NNLSCoefficientMapCombinator(
-            pattern_provider=mixed_stream,
-            solve_component=int(nnls_cfg.get("solve_component", 1)),
-            regularization=float(nnls_cfg.get("lambda", 0.0)),
-            smoothness_neighbors=int(nnls_cfg.get("smoothness_neighbors", 4)),
-            coefficient_threshold=float(
-                nnls_cfg.get("coefficient_threshold", 1e-8)
-            ),
-            max_coefficient=nnls_cfg.get("max_coefficient"),
-            maxiter=nnls_cfg.get("maxiter"),
-            intensity_scale=intensity_scale,
-            clip_output=clip_output,
-            transforms=combinator_transforms,
-        )
-    else:
-        # Existing Case 3 behavior remains the default and is unchanged.
-        combinator = SpatialNearestCombinator(
-            pattern_provider=mixed_stream,
-            skip_zero=True,
-            eps=1e-8,
-            jitter_mode=config["combinator"].get("jitter_mode", "global_cell"),
-            jitter_alpha=config["combinator"].get("jitter_alpha", 1.0),
-            intensity_scale=intensity_scale,
-            clip_output=clip_output,
-            transforms=combinator_transforms,
-        )
 
     # Optional rejection sampling on generated pairs (see make_beam_target_validator).
     # NOTE: a validator disables the batched-generation fast path in
