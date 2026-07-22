@@ -18,6 +18,9 @@ paths:
     processed_405_stimuation_large_256: "/workspace/dataset/405_stimuation_large_256"
     processed_405_realbeam_eval_256: "/workspace/dataset/405_realbeam_eval_256"
 
+    processed_690_background_256: "/workspace/dataset/690_background_256"
+    processed_690_reflection_large_256: "/workspace/dataset/690_reflection_large_256"
+    processed_690_realbeam_256: "/workspace/dataset/690_realbeam_256"
+
 
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"
-
