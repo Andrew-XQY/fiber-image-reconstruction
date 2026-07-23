@@ -1,14 +1,29 @@
 # ====================
 # CLEAR 2026 690 nm reflection reconstruction - cam3 input, cam2 target
 # Derived from CLEAR26_cam3; model and training workflow are unchanged.
-# Calibrated on 2026-07-22:
+# Calibrated on 2026-07-22, RE-CALIBRATED 2026-07-23 (saturation fix):
 #   reflection basis ROI>=0.55: 1764 pairs; realbeam eval ROI>=0.80:
 #   570 pairs -> 285 validation / 285 test.
 #   Eval peak p99.5/max: cam3 1969.9/2092.5 -> /2200;
-#   cam2 448.8/481.8 -> /500.
-#   Across three 1024-sample production-stream probes, sigma=8 and basis
-#   scales 0.65/2.70 gave mean synth/real ratios: energy 1.032,
-#   peak 1.002, footprint 0.958.
+#   cam2 448.8/481.8 -> /500.  (unchanged, verified 2026-07-23)
+#
+#   2026-07-23 POST-MORTEM of run CLEAR26_690_cam3-20260723113312:
+#   the previous scales 0.65/2.70 were fit by matching POST-CLIP energy, so
+#   the combinator's clip_output [0,1] hid a 1.6x overshoot. Measured
+#   pre-clip: reflection-basis cam2 spots carry E = sum/500 ~ 377, so every
+#   rendered sigma-8 kernel peaked at E/(2*pi*64) * 2.70 ~ 2.6 alone; with
+#   coeff-map mass ~2.5-3.2 per sample, 49% of real-pattern targets and 19%
+#   of inputs clipped (flat-top blobs, train input energy 1.64x eval). The
+#   model could not learn from saturated pairs: val_overall_mae 0.068 vs
+#   0.0057 for the 405 reference run.
+#   Fix (verified by pre-clip probe, 200-sample production mix, vs 200 eval
+#   frames): scales 0.65->0.31 (input), 2.70->1.18 (target); pattern stream
+#   moved to the ROI>=0.80 eval query (narrower coeff-sum spread 2.1-4.8,
+#   was 1.0-4.9 at ROI>=0.55). Result: input clipping 0%, target 0.8%
+#   marginal (p99.5 pre-clip peak ~1.02), synth/eval energy 1.03 (input),
+#   0.94 (target), footprint 0.097 vs 0.09 eval; matches the operating
+#   point of the working 405 optimized_SGM run (peaks 0.76-1.14x eval,
+#   <5% marginal clipping). NEVER recalibrate scales on post-clip stats.
 # Run with: EXPERIMENT_CONFIG=CLEAR26_690_cam3
 # ====================
 
@@ -19,9 +34,10 @@ file_extract: False
 note: |
   Train on 690_reflection_large_256, cam3 fiber -> cam2 screen, and evaluate
   on 690_realbeam_256. SQL pairs cameras by sample_id/run_id and emits
-  "input_path|target_path". As in CLEAR26_cam3, the 70/30 pattern stream also
-  reads cam2 coefficient maps from the second dataset; validation and test
-  image pairs are split separately from its stricter eval query.
+  "input_path|target_path". As in CLEAR26_cam3, the 70/30 pattern stream
+  reads cam2 coefficient maps from the second dataset - since 2026-07-23 via
+  the same ROI>=0.80 eval query (beam-prior shapes only; accepted overlap
+  with the val/test image pairs, which are split from that query).
 
 paths:
   output: ${paths.output_root}
@@ -132,7 +148,11 @@ data:
   dataset_sources: ["processed_690_reflection_large", "processed_690_realbeam_256"]
   train_sql_key: clear26_690_cam3_to_cam2_basis
   eval_sql_key: clear26_690_cam3_to_cam2_eval
-  pattern_sql_key: clear26_690_cam3_to_cam2_basis
+  # 2026-07-23: pattern stream now uses the ROI>=0.80 eval query. The old
+  # ROI>=0.55 pattern set added partially-cropped beams whose coeff-sum tail
+  # (up to 4.9) drove target saturation; same frames were already a subset,
+  # so train/eval overlap is unchanged in kind (accepted beam prior).
+  pattern_sql_key: clear26_690_cam3_to_cam2_eval
   provider_output_column: image_pair
   total_train_samples: 5000
   val_test_split: 0.5
@@ -199,18 +219,20 @@ data:
             - name: "torch_render_centroid_kernel"
               params:
                 sigma: 8.0
-      # Full-pipeline calibration: input 0.65 corrects the measured 0.60/0.92
-      # estimate; target 2.70 with sigma 8 gives 1.03x mean real energy over
-      # three independent 1024-sample production-stream probes.
+      # 2026-07-23 recalibration on PRE-CLIP statistics (see header):
+      # input 0.31 -> synth input energy 1.03x eval, peak p99.5 0.88, 0% clip;
+      # target 1.18 -> kernel peak/basis ~1.12 mean, assembled target energy
+      # 0.94x eval, 0.8% marginal clip. Old post-clip-fit values 0.65/2.70
+      # saturated 19%/49% of samples - do not restore them.
       - name: "multi_transform"
         params:
           transforms:
             - name: "torch_scale"
               params:
-                scale_factor: 0.65
+                scale_factor: 0.31
             - name: "torch_scale"
               params:
-                scale_factor: 2.70
+                scale_factor: 1.18
   dataset_ops:
     - name: "torch_batch"
       params:
