@@ -66,6 +66,18 @@ def main():
               f"ratio {ratio:5.2f}   peak synth {syn_p.mean():.3f}  real {real_p.mean():.3f}")
         print(f"        current torch_scale {cur:.3f}  ->  suggested {cur / ratio:.3f}"
               f"{'   (ok, keep)' if abs(ratio - 1) < 0.1 else ''}")
+        # 2026-07-23 guard: this probe sees POST-clip samples (combinator
+        # clip_output). If the stream is clipping, measured energy is
+        # understated and the suggestion above is INVALID (it will push the
+        # scale further into saturation - root cause of the 690 0.65/2.70
+        # failure). Reduce the scale until clipping vanishes, then re-run.
+        clip_frac = float((syn_p >= 0.999).mean())
+        if clip_frac > 0.02:
+            print(f"        [WARNING] {100*clip_frac:.0f}% of synthetic {role.strip()} "
+                  "samples are AT the clip ceiling (peak >= 0.999). Energy is "
+                  "measured post-clip, so the suggested scale is invalid. "
+                  "Lower torch_scale until this warning clears before trusting "
+                  "any suggestion.")
 
 
 if __name__ == "__main__":
