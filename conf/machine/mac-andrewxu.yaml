@@ -18,12 +18,12 @@ paths:
 
     processed_chromox_cropped: "/Users/andrewxu/Documents/DataHub/processed/CLEAR25_Chromox_Cropped"
 
-    processed_405_background_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_background_256"
-    processed_405_realbeam_random_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_realbeam_random_256"
-    processed_405_realbeam_raster_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_realbeam_raster_256"
-    processed_405_stimuation_large_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_stimuation_large_256"
-    processed_405_realbeam_eval_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/405_realbeam_eval_256"
+    processed_405_background_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Friday/405_background_256"
+    processed_405_realbeam_random_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Friday/405_realbeam_random_256"
+    processed_405_realbeam_raster_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Friday/405_realbeam_raster_256"
+    processed_405_stimuation_large_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Friday/405_stimuation_large_256"
+    processed_405_realbeam_eval_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Friday/405_realbeam_eval_256"
 
-    processed_690_background_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/690_background_256"
-    processed_690_reflection_large_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/690_reflection_large_256"
-    processed_690_realbeam_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/690_realbeam_256"
+    processed_690_background_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Thursday/690_background_256"
+    processed_690_reflection_large_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Thursday/690_reflection_large_256"
+    processed_690_realbeam_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Thursday/690_realbeam_256"
