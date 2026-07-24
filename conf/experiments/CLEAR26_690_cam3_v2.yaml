@@ -152,7 +152,10 @@ simulation:
 # fast path while adding an unprobed ingredient.
 
 training:
-  epochs: &epochs 100
+  # 2026-07-24: run 690_cam3_v2-20260724090448 hit the 100-epoch cap while
+  # still improving (best val MAE at epoch 99, no early stop). Patience 20
+  # governs the real stop.
+  epochs: &epochs 250
   learning_rate: 1.0e-4
   batch_size: &batch 32
 
