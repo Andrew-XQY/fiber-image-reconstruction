@@ -53,7 +53,16 @@ model:
   encoder:          [64,   128, 128, 256, 512, 1024]
   decoder:          [1024, 512, 256, 128, 128, 64  ]
   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-  apply_dropout:    [1,    1,   0,   0,   0,   0   ]
+  # 2026-07-23 ablation arm A: dropout OFF. NOT a proven fix -
+  # 405_cam3_with_beam_prior had dropout ON with excellent centroids, so
+  # dropout alone does not cause the ring artifact seen in
+  # 690_cam3-20260723134626_with_prior (azimuthal err 1.43x radial).
+  # Hypothesis being tested: 690 reflection inputs carry angle as ~4%-RMS
+  # modulations on a dominant donut envelope (pairwise corr 0.72-0.99), and
+  # Dropout2d(0.5) at the two deepest decoder blocks suppresses such weak
+  # features, unlike 405 speckle. Revert to [1,1,0,0,0,0] if arm A shows no
+  # centroid gain.
+  apply_dropout:    [0,    0,   0,   0,   0,   0   ]
   final_activation: sigmoid
 
 sql:

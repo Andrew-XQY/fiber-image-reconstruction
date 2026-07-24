@@ -176,6 +176,18 @@ def build_datasets(config: dict) -> dict:
     eval_transforms = build_transforms_from_config(
         with_parent_dir(config["data"]["transforms"]["torch"], eval_db_path.parent)
     )
+    # Optional transforms appended ONLY to the eval/val/test chain — never to
+    # the basis-caching chain (train_transforms above is shared with basis).
+    # Needed when the combinator applies post-combination transforms (e.g.
+    # per-sample normalization) that eval samples must mirror. See
+    # CLEAR26_690_cam3_v2.yaml.
+    eval_extra_config = config["data"].get("eval_extra_transforms", {}).get("torch", [])
+    if eval_extra_config:
+        eval_transforms.extend(
+            build_transforms_from_config(
+                with_parent_dir(eval_extra_config, eval_db_path.parent)
+            )
+        )
     pattern_transforms = build_transforms_from_config(
         with_parent_dir(config["image_generator"]["transforms"], pattern_db_path.parent)
     )
