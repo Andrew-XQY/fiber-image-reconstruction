@@ -1,0 +1,366 @@
+# ====================
+# CLEAR 2026 690 nm reflection reconstruction - cam3 input, cam2 target
+# v3 "edge-enriched" pipeline - 2026-07-25. Inherits everything from v2
+# (per-sample L2 normalization, positive SGM prior, dropout off, 250 epochs)
+# and changes ONLY the training position prior.
+#
+# WHY v3: run CLEAR26_690_cam3_v2-no_earlystop reached val MAE 0.00799 but
+# shows systematic centripetal shrinkage: for r_gt > 0.1 the predicted
+# centroid lands closer to center in 93-100% of eval samples (mean radial
+# bias -0.025..-0.040 canvas units) - classic MSE regression-to-the-mean
+# against a center-heavy position prior (eval-quality beams are ~8x denser
+# per area at r<0.2 than r>0.3). Fixing at the TRAINING side (flatter
+# position prior) rather than warping output images at inference.
+#
+# v3 CHANGES (verified by probe_v3_prior.py, 2026-07-25):
+#   1. Beam-prior patterns from a dedicated ROI>=0.70 query (1131 frames,
+#      naturally edge-heavy: 37.8% at r>0.3 vs 22.5% in eval). Safe now:
+#      the old clipping reason for ROI 0.80 died with per-sample
+#      normalization. Eval stays ROI>=0.80 - only the pattern prior widens.
+#   2. SGM blob placement: area-uniform annulus center_radius_range
+#      [0.0, 0.45] (replaces legacy rotated-square placement).
+#   3. weighted_stream 0.7/0.3 -> 0.6/0.4. Resulting mixed radial
+#      distribution [0-.1|.1-.2|.2-.3|.3+] = [.093 .276 .255 .319] vs eval
+#      [.105 .363 .302 .225]: ~1.4x edge overweight, center preserved.
+#   Verified through the corrected graph: 0/150 degenerate, input peak
+#   ~0.42, target ~0.45, p99.5 <= 0.67 - no clipping.
+# Run with: EXPERIMENT_CONFIG=CLEAR26_690_cam3_v3
+# ====================
+
+seed: &seed 42
+name: &config "CLEAR26_690_cam3_v3.yaml"
+framework: "pytorch"
+file_extract: False
+note: |
+  v2 shape-normalized pipeline. Train on 690_reflection_large_256, cam3
+  fiber -> cam2 screen, evaluate on 690_realbeam_256. Input and target are
+  L2-normalized per sample (post-combination / in eval chain), making the
+  task intensity-invariant; eval metrics (centroid, width) are unaffected.
+  Beam prior kept at 70/30 via the ROI>=0.80 eval query.
+
+paths:
+  output: ${paths.output_root}
+  processed_690_background: ${paths.datasets.processed_690_background_256}
+  processed_690_reflection_large: ${paths.datasets.processed_690_reflection_large_256}
+  processed_690_realbeam_256: ${paths.datasets.processed_690_realbeam_256}
+
+model:
+  name: "CAE"
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,   128, 128, 256, 512, 1024]
+  decoder:          [1024, 512, 256, 128, 128, 64  ]
+  apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
+  # Ablation arm A carried over from CLEAR26_690_cam3 (see its comments).
+  apply_dropout:    [0,    0,   0,   0,   0,   0   ]
+  final_activation: sigmoid
+
+sql:
+  clear26_690_cam3_to_cam2_basis: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
+      AND b.roi_energy_fraction >= 0.55
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+  clear26_690_cam3_to_cam2_eval: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
+      AND b.roi_energy_fraction >= 0.80
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+  clear26_690_cam3_to_cam2_pattern: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
+      AND b.roi_energy_fraction >= 0.70
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+simulation:
+  canvas_size: [256, 256]
+  total_Guassian_num: 3
+  max_pixel_value: 1.0
+  max_intensity: 0.018
+  area_boost_scale: 0.000352941176470588
+  max_peak_intensity: null
+  minimum_pixel_threshold: 0.02
+  fade_rate: 0.10
+  std_1: 0.05
+  std_2: 0.10
+  distribution: "other"
+  # v2: strictly positive intensity - REQUIRED under per-sample
+  # normalization (near-empty patterns would be eps-amplified into
+  # saturated garbage). Known side effect: all 3 Gaussians are always
+  # live (legacy averaged ~2.7), a mild morphology shift - measured
+  # acceptable by probe_v2_prior (see CLEAR26_690_fix/REPORT.md).
+  intensity_range: [0.004, 0.018]
+  # v3: area-uniform annulus placement for edge coverage (see header).
+  center_radius_range: [0.0, 0.45]
+  process_functions:
+    - name: "resize"
+      params:
+        size: [34, 34]
+        interpolation: "area"
+    - name: "shrink_to_canvas"
+      params:
+        scale: 0.95
+        fill: 0.0
+        interpolation: "area"
+
+# v2: validator intentionally ABSENT. The strictly positive intensity_range
+# already prevents the degenerate near-empty samples that normalization
+# would amplify, and the validator would disable the batched-generation
+# fast path while adding an unprobed ingredient.
+
+training:
+  # 2026-07-24: run 690_cam3_v2-20260724090448 hit the 100-epoch cap while
+  # still improving (best val MAE at epoch 99, no early stop). Patience 20
+  # governs the real stop.
+  epochs: &epochs 250
+  learning_rate: 1.0e-4
+  batch_size: &batch 32
+
+callbacks:
+  - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
+  - name: "torch_early_stopping"
+    params:
+      monitor: "val_loss"
+      patience: 20
+  - name: "torch_image_reconstruction_callback"
+    params:
+      save_dir: ${paths.output}
+      include_training_images: True
+
+dataset_structure:
+  db: "dataset.db"
+
+data:
+  pipeline_case: spatial_nearest_combinator
+  dataset_sources: ["processed_690_reflection_large", "processed_690_realbeam_256"]
+  train_sql_key: clear26_690_cam3_to_cam2_basis
+  eval_sql_key: clear26_690_cam3_to_cam2_eval
+  # Beam-prior patterns from the ROI>=0.80 eval query (see CLEAR26_690_cam3).
+  pattern_sql_key: clear26_690_cam3_to_cam2_pattern
+  provider_output_column: image_pair
+  total_train_samples: 5000
+  val_test_split: 0.5
+  input_shape: &inp [256, 256]
+  output_shape: &out [256, 256]
+  transforms:
+    torch:
+      - name: "split_text"
+        params:
+          separator: "|"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "add_parent_dir"
+            - name: "add_parent_dir"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "load_image16"
+            - name: "load_image16"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_to_tensor"
+            - name: "torch_to_tensor"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_690_background}
+                camera: "cam3"
+                clip_min: 0.0
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_690_background}
+                camera: "cam2"
+                clip_min: 0.0
+      # Count normalizers unchanged (calibrated 2026-07-22, verified 07-23).
+      # IMPORTANT: this data.transforms chain is ALSO the basis-caching
+      # chain (utils.py extends it with basis_transforms). It must contain
+      # NO per-sample normalization - basis frames enter the combinator in
+      # calibrated raw units so mixture weighting, the reflection field's
+      # spatial nonuniformity, and the sensor-noise count mapping stay
+      # physical. Per-sample normalization lives in combinator.transforms
+      # (train) and eval_extra_transforms (eval) ONLY.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 2200.0
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 500.0
+  # v2: appended ONLY to the eval/val/test chain by the utils.py hook -
+  # mirrors combinator.transforms so train and eval live in the same
+  # normalized space. Both slots are torch tensors here.
+  eval_extra_transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_l2_normalize"
+            - name: "torch_l2_normalize"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 24.0
+            - name: "torch_scale"
+              params:
+                scale_factor: 16.0
+  basis_transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - null
+            - name: "torch_render_centroid_kernel"
+              params:
+                sigma: 8.0
+      # Kept from the 07-23 recalibration: 0.31 keeps the sensor-noise
+      # count-domain mapping honest; 1.18 is inert under target L2 norm
+      # but kept so pre-normalization diagnostics stay comparable.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.31
+            - name: "torch_scale"
+              params:
+                scale_factor: 1.18
+  dataset_ops:
+    - name: "torch_batch"
+      params:
+        batch_size: *batch
+        shuffle: True
+        num_workers: 0
+        prefetch_factor: 2
+        seed: *seed
+
+combinator:
+  jitter_mode: global_cell
+  jitter_alpha: 1.0
+  generation_batch_size: *batch
+  clip_output: [0.0, 1.0]
+  transforms:
+    torch:
+      # Physical order: sensor noise in counts FIRST, then normalization.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_sensor_noise"
+              params:
+                a: 0.118
+                b: 4.82
+                count_scale: 2200.0
+                param_jitter: 2.0
+                gain: null
+                clip_min: 0.0
+            - null
+      # v2 per-sample normalization. Type note: input slot receives a torch
+      # tensor (from torch_sensor_noise) -> torch_l2_normalize; target slot
+      # receives numpy from the combinator -> numpy 'l2_normalize'.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_l2_normalize"
+            - name: "l2_normalize"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 24.0
+            - name: "torch_scale"
+              params:
+                scale_factor: 16.0
+
+image_generator:
+  cache_transformed: true
+  transforms:
+    - name: "split_text"
+      params:
+        separator: "|"
+    - name: "tuple_select"
+      params:
+        index: 1
+    - name: "add_parent_dir"
+    - name: "load_image"
+    - name: "to_narray"
+    - name: "to_grayscale"
+    - name: "subtract_background"
+      params:
+        background_source: ${paths.processed_690_background}
+        camera: "cam2"
+        clip_min: 0.0
+    - name: "resize"
+      params:
+        size: [34, 34]
+        interpolation: "area"
+    - name: "remap_range"
+      params:
+        current_min: 0.0
+        current_max: 4095.0
+        target_min: 0.0
+        target_max: 1.0
+    - name: "shrink_to_canvas"
+      params:
+        scale: 1.0
+        fill: 0.0
+        interpolation: "bilinear"
+
+weighted_stream:
+  real_weight: 0.6
+  sgm_weight: 0.4
+
+extra_files: ["models/CAE.py"]
