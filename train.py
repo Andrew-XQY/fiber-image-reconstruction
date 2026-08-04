@@ -45,9 +45,15 @@ def main():
     val_dataset = dataset_bundle["val_dataset"]
     test_dataset = dataset_bundle["test_dataset"]
     config_manager["dataset_used"] = dataset_bundle["dataset_sources"]
+    contract_path = save_evaluation_contract(
+        output_dir / "evaluation_contract.json",
+        dataset_bundle["eval_contract"],
+        phase="training",
+    )
 
     print("Samples: ", len(train_provider), len(val_provider), len(test_provider))
     print("Batch: ", len(train_dataset), len(val_dataset), len(test_dataset))
+    print("Evaluation contract:", contract_path)
 
     model_name = config['model']['name']
 
