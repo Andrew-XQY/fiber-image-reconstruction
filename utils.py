@@ -3,6 +3,11 @@ import torch
 import torchvision.utils as vutils
 import math
 import numpy as np
+import hashlib
+import json
+import platform
+from functools import lru_cache
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from copy import deepcopy
 from xflow import SqlProvider, PyTorchPipeline, instantiate, show_model_info
@@ -40,6 +45,336 @@ def resolve_dataset_dir(config: dict, path_or_key: str) -> Path:
     return p
 
 
+def _with_parent_dir(transforms_config, parent_dir):
+    """Return a copy with every add_parent_dir node bound to one dataset root."""
+    transforms_config = deepcopy(transforms_config)
+
+    def apply(node):
+        if isinstance(node, list):
+            for item in node:
+                apply(item)
+        elif isinstance(node, dict):
+            if node.get("name") == "add_parent_dir":
+                node.setdefault("params", {})["parent_dir"] = str(parent_dir)
+            for value in node.values():
+                apply(value)
+
+    apply(transforms_config)
+    return transforms_config
+
+
+def _eval_dataset_ops(config: dict) -> list:
+    """Use the configured batching contract without shuffling evaluation rows."""
+    dataset_ops = deepcopy(config["data"]["dataset_ops"])
+    batch_op_found = False
+    for op in dataset_ops:
+        if not isinstance(op, dict) or op.get("name") != "torch_batch":
+            raise ValueError(
+                "Evaluation dataset_ops may only contain torch_batch; "
+                "count/order-changing operations would break sample identity."
+            )
+        op.setdefault("params", {})["shuffle"] = False
+        op["params"]["drop_last"] = False
+        batch_op_found = True
+    if not batch_op_found:
+        raise ValueError("data.dataset_ops must contain a torch_batch operation.")
+    return dataset_ops
+
+
+def _canonicalize_contract_paths(node, config: dict):
+    """Replace machine-specific dataset roots with stable dataset-key tokens."""
+    roots = []
+    for key, value in config.get("paths", {}).get("datasets", {}).items():
+        if isinstance(value, str):
+            roots.append((value.rstrip("/\\"), f"${{dataset:{key}}}"))
+    roots.sort(key=lambda item: len(item[0]), reverse=True)
+
+    def apply(value):
+        if isinstance(value, dict):
+            return {key: apply(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [apply(item) for item in value]
+        if isinstance(value, str):
+            for root, token in roots:
+                if value == root:
+                    return token
+                if value.startswith(root + "/") or value.startswith(root + "\\"):
+                    return token + value[len(root):]
+        return value
+
+    return apply(node)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _fingerprint_files(paths, root: Path) -> tuple:
+    """Hash path identities and bytes without embedding machine-specific roots."""
+    digest = hashlib.sha256()
+    relative_paths = sorted(dict.fromkeys(str(path) for path in paths))
+    for relative_path in relative_paths:
+        path = Path(relative_path)
+        resolved = path if path.is_absolute() else root / path
+        if not resolved.is_file():
+            raise FileNotFoundError(f"Evaluation contract file is missing: {resolved}")
+        try:
+            stable_path = resolved.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            stable_path = resolved.name
+        digest.update(stable_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(_sha256_file(resolved)))
+    return len(relative_paths), digest.hexdigest()
+
+
+def _fingerprint_path(path: Path) -> dict:
+    """Hash a file or directory tree, including stable relative file names."""
+    if path.is_file():
+        return {"file_count": 1, "sha256": _sha256_file(path)}
+    if not path.is_dir():
+        raise FileNotFoundError(f"Contract dependency is missing: {path}")
+
+    digest = hashlib.sha256()
+    files = sorted(item for item in path.rglob("*") if item.is_file())
+    for item in files:
+        digest.update(item.relative_to(path).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(_sha256_file(item)))
+    return {"file_count": len(files), "sha256": digest.hexdigest()}
+
+
+def _config_path_fingerprints(node) -> list:
+    """Fingerprint external transform inputs such as measured backgrounds."""
+    paths = set()
+
+    def collect(value, key=None):
+        if isinstance(value, dict):
+            for child_key, child in value.items():
+                collect(child, child_key)
+        elif isinstance(value, list):
+            for child in value:
+                collect(child, key)
+        elif (
+            isinstance(value, str)
+            and isinstance(key, str)
+            and key != "parent_dir"
+            and (key == "background_source" or key.endswith(("_file", "_path")))
+        ):
+            path = Path(value).expanduser()
+            if path.exists():
+                paths.add(path.resolve())
+
+    collect(node)
+    return [
+        {"path": str(path), **_fingerprint_path(path)}
+        for path in sorted(paths, key=str)
+    ]
+
+
+@lru_cache(maxsize=None)
+def _python_tree_sha256(root: str) -> str:
+    """Fingerprint installed Python source so editable-package changes are visible."""
+    root_path = Path(root)
+    digest = hashlib.sha256()
+    for path in sorted(root_path.rglob("*.py")):
+        digest.update(path.relative_to(root_path).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(_sha256_file(path)))
+    return digest.hexdigest()
+
+
+def runtime_environment() -> dict:
+    """Small provenance record for comparing training and inference runtimes."""
+    import xflow
+
+    def package_version(name):
+        try:
+            return version(name)
+        except PackageNotFoundError:
+            return "not-installed"
+
+    xflow_root = Path(xflow.__file__).resolve().parent
+    return {
+        "python": platform.python_version(),
+        "torch": torch.__version__,
+        "torch_cuda": torch.version.cuda,
+        "torchvision": package_version("torchvision"),
+        "numpy": np.__version__,
+        "scikit_image": package_version("scikit-image"),
+        "pillow": package_version("Pillow"),
+        "xflow": getattr(xflow, "__version__", "unknown"),
+        "xflow_path": str(Path(xflow.__file__).resolve()),
+        "xflow_source_sha256": _python_tree_sha256(str(xflow_root)),
+        "evaluation_utils_sha256": _sha256_file(Path(__file__).resolve()),
+        "platform": platform.platform(),
+    }
+
+
+def evaluation_contract_sha256(contract: dict) -> str:
+    """Recompute a contract digest instead of trusting its embedded hash."""
+    payload = {key: value for key, value in contract.items() if key != "sha256"}
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def save_evaluation_contract(
+    path,
+    contract: dict,
+    *,
+    phase: str,
+    metadata: dict = None,
+) -> Path:
+    """Persist the semantic data contract, split membership, and runtime."""
+    path = Path(path)
+    actual_sha = evaluation_contract_sha256(contract)
+    if contract.get("sha256") != actual_sha:
+        raise ValueError(
+            f"Invalid evaluation contract digest: embedded={contract.get('sha256')}, "
+            f"recomputed={actual_sha}"
+        )
+    payload = {
+        "phase": phase,
+        "contract": contract,
+        "runtime": runtime_environment(),
+    }
+    if metadata:
+        payload["metadata"] = metadata
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    temporary_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)
+    return path
+
+
+def build_eval_datasets(config: dict) -> dict:
+    """Build validation/test data once, identically for training and inference."""
+    dataset_sources = config["data"].get(
+        "dataset_sources", ["processed_chromox_cropped"]
+    )
+    dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
+    db_rel = config["dataset_structure"]["db"].lstrip("/\\")
+    db_paths = [d / db_rel for d in dataset_dirs]
+    eval_source_index = 1 if len(db_paths) > 1 else 0
+    eval_db_path = db_paths[eval_source_index]
+
+    eval_sql_key = config["data"]["eval_sql_key"]
+    eval_sql = config["sql"][eval_sql_key]
+    if "order by" not in eval_sql.lower():
+        raise ValueError(
+            f"Evaluation SQL {eval_sql_key!r} must contain ORDER BY "
+            "before a deterministic val/test split can be guaranteed."
+        )
+    provider_output_column = config["data"].get(
+        "provider_output_column", "image_path"
+    )
+    full_eval_provider = SqlProvider(
+        sources={
+            "connection": eval_db_path,
+            "sql": eval_sql,
+        },
+        output_config={"list": provider_output_column},
+    )
+    split_ratio = float(config["data"]["val_test_split"])
+    split_seed = int(config["data"].get("val_test_seed", config.get("seed", 42)))
+    val_provider, test_provider = full_eval_provider.split(
+        split_ratio,
+        seed=split_seed,
+    )
+
+    raw_transform_config = deepcopy(config["data"]["transforms"]["torch"])
+    raw_transform_config.extend(
+        deepcopy(
+            config["data"].get("eval_extra_transforms", {}).get("torch", [])
+        )
+    )
+    resolved_transform_config = _with_parent_dir(
+        raw_transform_config,
+        eval_db_path.parent,
+    )
+    eval_transforms = build_transforms_from_config(resolved_transform_config)
+    eval_dataset_ops = _eval_dataset_ops(config)
+    val_items = [str(item) for item in val_provider()]
+    test_items = [str(item) for item in test_provider()]
+    eval_file_paths = [
+        part
+        for item in val_items + test_items
+        for part in item.split("|")
+    ]
+    eval_file_count, eval_files_sha256 = _fingerprint_files(
+        eval_file_paths,
+        eval_db_path.parent,
+    )
+    auxiliary_fingerprints = _config_path_fingerprints(
+        resolved_transform_config
+    )
+
+    val_dataset = PyTorchPipeline(
+        val_provider,
+        eval_transforms,
+        skip_errors=False,
+    ).to_memory_dataset(eval_dataset_ops)
+    test_dataset = PyTorchPipeline(
+        test_provider,
+        eval_transforms,
+        skip_errors=False,
+    ).to_memory_dataset(eval_dataset_ops)
+
+    contract_payload = _canonicalize_contract_paths({
+        "schema_version": 2,
+        "dataset_source": dataset_sources[eval_source_index],
+        "eval_sql_key": eval_sql_key,
+        "eval_sql": eval_sql,
+        "provider_output_column": provider_output_column,
+        "split_ratio": split_ratio,
+        "split_seed": split_seed,
+        "transforms": raw_transform_config,
+        "dataset_ops": eval_dataset_ops,
+        "eval_database_sha256": _sha256_file(eval_db_path),
+        "eval_file_count": eval_file_count,
+        "eval_files_sha256": eval_files_sha256,
+        "auxiliary_data": auxiliary_fingerprints,
+        "xflow_transform_source_sha256": runtime_environment()[
+            "xflow_source_sha256"
+        ],
+        "evaluation_builder_source_sha256": runtime_environment()[
+            "evaluation_utils_sha256"
+        ],
+        "val_items": val_items,
+        "test_items": test_items,
+    }, config)
+    contract = {
+        **contract_payload,
+        "sha256": evaluation_contract_sha256(contract_payload),
+    }
+
+    return {
+        "full_eval_provider": full_eval_provider,
+        "val_provider": val_provider,
+        "test_provider": test_provider,
+        "val_dataset": val_dataset,
+        "test_dataset": test_dataset,
+        "dataset_sources": dataset_sources,
+        "dataset_dirs": dataset_dirs,
+        "db_paths": db_paths,
+        "eval_db_path": eval_db_path,
+        "eval_transform_config": resolved_transform_config,
+        "eval_dataset_ops": eval_dataset_ops,
+        "eval_contract": contract,
+    }
+
+
 # Rejection-sampling quality gate for generated (input, target) pairs, applied
 # to the RENDERED target. Bands come from independent/measured beam statistics,
 # NOT tuned on eval metrics. Config section: sgm_validator (see yaml).
@@ -73,27 +408,11 @@ def make_beam_target_validator(cfg: dict):
 
 
 def build_datasets(config: dict) -> dict:
-    dataset_sources = config["data"].get("dataset_sources", ["processed_chromox_cropped"])
-    dataset_dirs = [resolve_dataset_dir(config, src) for src in dataset_sources]
-    db_rel = config["dataset_structure"]["db"].lstrip("/\\")
-    db_paths = [d / db_rel for d in dataset_dirs]
+    eval_bundle = build_eval_datasets(config)
+    dataset_sources = eval_bundle["dataset_sources"]
+    dataset_dirs = eval_bundle["dataset_dirs"]
+    db_paths = eval_bundle["db_paths"]
     provider_output_column = config["data"].get("provider_output_column", "image_path")
-
-    def with_parent_dir(transforms_config, parent_dir):
-        transforms_config = deepcopy(transforms_config)
-
-        def apply(items):
-            for t in items:
-                if not isinstance(t, dict):
-                    continue  # null = pass-through slot in multi_transform
-                if t.get("name") == "add_parent_dir":
-                    t.setdefault("params", {})["parent_dir"] = str(parent_dir)
-                child_transforms = t.get("params", {}).get("transforms")
-                if child_transforms:
-                    apply(child_transforms)
-
-        apply(transforms_config)
-        return transforms_config
 
     def build_sgm_stream(cfg):
         simulation_cfg = cfg["simulation"]
@@ -146,23 +465,21 @@ def build_datasets(config: dict) -> dict:
     train_db_path = db_paths[0]
     eval_db_path = db_paths[1] if len(db_paths) > 1 else train_db_path
     pattern_db_path = eval_db_path
+    eval_provider = eval_bundle["full_eval_provider"]
+    val_provider = eval_bundle["val_provider"]
+    test_provider = eval_bundle["test_provider"]
 
     train_provider = SqlProvider(
         sources={"connection": train_db_path, "sql": config["sql"][train_sql_key]},
         output_config={"list": provider_output_column},
     )
-    eval_provider = SqlProvider(
-        sources={"connection": eval_db_path, "sql": config["sql"][eval_sql_key]},
-        output_config={"list": provider_output_column},
-    )
-    val_provider, test_provider = eval_provider.split(config["data"]["val_test_split"])
     pattern_source_provider = SqlProvider(
         sources={"connection": pattern_db_path, "sql": config["sql"][pattern_sql_key]},
         output_config={"list": provider_output_column},
     )
 
     train_transforms = build_transforms_from_config(
-        with_parent_dir(config["data"]["transforms"]["torch"], train_db_path.parent)
+        _with_parent_dir(config["data"]["transforms"]["torch"], train_db_path.parent)
     )
     basis_transforms_config = config["data"].get("basis_transforms", {}).get(
         "torch", []
@@ -170,26 +487,11 @@ def build_datasets(config: dict) -> dict:
     if basis_transforms_config:
         train_transforms.extend(
             build_transforms_from_config(
-                with_parent_dir(basis_transforms_config, train_db_path.parent)
-            )
-        )
-    eval_transforms = build_transforms_from_config(
-        with_parent_dir(config["data"]["transforms"]["torch"], eval_db_path.parent)
-    )
-    # Optional transforms appended ONLY to the eval/val/test chain — never to
-    # the basis-caching chain (train_transforms above is shared with basis).
-    # Needed when the combinator applies post-combination transforms (e.g.
-    # per-sample normalization) that eval samples must mirror. See
-    # CLEAR26_690_cam3_v2.yaml.
-    eval_extra_config = config["data"].get("eval_extra_transforms", {}).get("torch", [])
-    if eval_extra_config:
-        eval_transforms.extend(
-            build_transforms_from_config(
-                with_parent_dir(eval_extra_config, eval_db_path.parent)
+                _with_parent_dir(basis_transforms_config, train_db_path.parent)
             )
         )
     pattern_transforms = build_transforms_from_config(
-        with_parent_dir(config["image_generator"]["transforms"], pattern_db_path.parent)
+        _with_parent_dir(config["image_generator"]["transforms"], pattern_db_path.parent)
     )
 
     real_stream = pattern_gen.image_pattern_stream(
@@ -255,14 +557,8 @@ def build_datasets(config: dict) -> dict:
         retry_policy=retry_policy,
         eager=True,
     ).to_framework_dataset(dataset_ops=config["data"]["dataset_ops"])
-    val_dataset = PyTorchPipeline(
-        val_provider,
-        eval_transforms,
-    ).to_memory_dataset(config["data"]["dataset_ops"])
-    test_dataset = PyTorchPipeline(
-        test_provider,
-        eval_transforms,
-    ).to_memory_dataset(config["data"]["dataset_ops"])
+    val_dataset = eval_bundle["val_dataset"]
+    test_dataset = eval_bundle["test_dataset"]
 
     # ====================================
     # Legacy case templates kept for future reuse.
@@ -389,6 +685,7 @@ def build_datasets(config: dict) -> dict:
         "val_dataset": val_dataset,
         "test_dataset": test_dataset,
         "dataset_sources": dataset_sources,
+        "eval_contract": eval_bundle["eval_contract"],
     }
 
 
