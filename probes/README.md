@@ -10,7 +10,7 @@ dataset changes — never tune these constants on eval metrics.
 |---|---|---|---|---|---|
 | `probe_normalizer` | p99.5 of bg-subtracted eval peaks + margin | `torch_remap_range.current_max`, `torch_sensor_noise.count_scale` | 1600 | 2100 | 900 |
 | `probe_sensor_noise` | photon-transfer fit `var = a*signal + b` (spatial noise-gap) | `torch_sensor_noise.{a, b}` | a=0.106 b=2.81 | a=0.118 b=4.82 | — |
-| `probe_basis_scale` | synth/real energy ratio of the built pipeline | `basis_transforms torch_scale.scale_factor` | 0.26 | 0.28 (=1/3.58) | 0.26 |
+| `probe_basis_scale` | pre-L2 synth/real energy ratio + downstream clipping | `basis_transforms torch_scale.scale_factor` | 0.26 | 0.28 (=1/3.58) | 0.26 |
 | `probe_sgm_prior` | 5 beam marginals, real vs rendered targets | `simulation.*`, target kernel/scale | — | see yaml | — |
 
 The table records the original 405 nm references. The calibrated 690 nm
@@ -46,6 +46,11 @@ Order matters: normalizer → sensor noise → basis scale → SGM prior
 - `sgm_validator` stays disabled — priors are matched by construction; verify
   via `probe_sgm_prior --synth`, epoch_1 images, or `smoke_test.py`.
 - One fixed normalizer per camera; never per-image min-max (kills linearity).
+- Basis scale is measured before per-sample L2, which otherwise cancels it.
+  Synthetic sensor noise remains active before that boundary. Clipping is
+  checked separately by replaying the downstream transforms without applying
+  the clip; in an L2 pipeline, fix clipping with the post-L2 scale, not the
+  basis scale.
 
 Provenance: original probe scripts were not preserved; these are clean
 reimplementations of the procedures documented in the yaml comments (which

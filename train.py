@@ -1,6 +1,8 @@
 # pip install xflow-py
 import cv2
 import os
+import random
+import numpy as np
 from pathlib import Path
 from datetime import datetime  
 from functools import partial
@@ -17,7 +19,7 @@ def main():
     # Configuration
     # ========================================
     # Create experiment output directory  (timestamped)
-    experiment_name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_690_cam1_v2")
+    experiment_name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_670_cam3_v3")
     folder_name = f"{experiment_name}-{datetime.now():%Y%m%d%H%M%S}"
     config_manager = ConfigManager(
         load_config(
@@ -28,6 +30,12 @@ def main():
         )
     )
     config = config_manager.get()
+    seed = int(config["seed"])
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
     config_manager.add_files(config.get("extra_files", []))
     output_dir = Path(config["paths"]["output"])
     output_dir.mkdir(parents=True, exist_ok=True)
