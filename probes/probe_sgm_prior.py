@@ -7,7 +7,9 @@ measures rendered training targets from one of three coefficient sources:
 
 Use ``mixed`` for the final end-to-end calibration because the real and SGM
 branches can intentionally bracket the eval distribution. Use ``sgm`` and
-``real`` to diagnose either branch in isolation.
+``real`` to diagnose either branch in isolation. Synthetic probing covers one
+configured training epoch by default so an ordered, unshuffled real-pattern
+stream is not judged only on its first few samples.
 
 Run from repo root:
   python -m probes.probe_sgm_prior --config CLEAR26_690_cam3
@@ -24,6 +26,7 @@ import numpy as np
 from probes.common import (beam_marginals, counts_loader, iter_pairs,
                            load_experiment, remap_maxes, slot_cameras,
                            summarize)
+from xflow.data import build_transforms_from_config
 
 KEYS = ("peak", "sigma_x_rel", "sigma_y_rel", "centroid_r_rel", "footprint", "empty")
 
@@ -39,12 +42,41 @@ def collect(images, thr):
     return stats, n
 
 
+def apply_eval_target_transforms(cfg, image):
+    """Apply the configured eval-only chain and return its target slot.
+
+    ``counts_loader`` plus the remap below reproduces the shared data-transform
+    chain up to normalized camera units.  The trainer then appends
+    ``data.eval_extra_transforms`` to val/test samples; synthetic targets have
+    the equivalent combinator chain applied already, so the probe must do the
+    same here before comparing their marginals.
+    """
+    transform_cfg = cfg["data"].get("eval_extra_transforms", {}).get("torch", [])
+    if not transform_cfg:
+        return image
+
+    import torch
+
+    target = torch.as_tensor(image, dtype=torch.float32)
+    # Eval transforms operate on an (input, target) pair.  The input result is
+    # irrelevant to this probe, so a clone keeps the exact pair-level contract
+    # without loading the camera-input image a second time.
+    pair = (target.clone(), target)
+    for transform in build_transforms_from_config(transform_cfg):
+        pair = transform(pair)
+    target = pair[1]
+    if hasattr(target, "detach"):
+        target = target.detach().cpu()
+    return np.asarray(target, dtype=np.float32)
+
+
 def real_targets(cfg, sql_key, limit):
     _, cam_tgt = slot_cameras(cfg)
     _, tgt_max = remap_maxes(cfg)
     load = counts_loader(cfg, cam_tgt)
     for _, p_tgt in iter_pairs(cfg, sql_key=sql_key, limit=limit):
-        yield load(p_tgt) / tgt_max
+        normalized = load(p_tgt) / tgt_max
+        yield apply_eval_target_transforms(cfg, normalized)
 
 
 def synth_targets(cfg, limit, source="mixed"):
@@ -78,7 +110,12 @@ def main():
     ap.add_argument("--limit", type=int, default=None, help="max real targets")
     ap.add_argument("--synth", action="store_true",
                     help="also Monte-Carlo the selected synthetic stream")
-    ap.add_argument("--synth-samples", type=int, default=512)
+    ap.add_argument(
+        "--synth-samples",
+        type=int,
+        default=None,
+        help="synthetic samples (default: data.total_train_samples, one train epoch)",
+    )
     ap.add_argument("--source", choices=["mixed", "sgm", "real"], default="mixed",
                     help="pattern source to probe (default: configured mixture)")
     ap.add_argument("--thr", type=float, default=0.05, help="footprint threshold")
@@ -93,8 +130,15 @@ def main():
     report("REAL eval targets", stats, n, args.thr)
 
     if args.synth:
+        synth_samples = (
+            args.synth_samples
+            if args.synth_samples is not None
+            else int(cfg["data"]["total_train_samples"])
+        )
+        if synth_samples <= 0:
+            ap.error("--synth-samples must be positive")
         stats_s, n_s = collect(
-            synth_targets(cfg, args.synth_samples, args.source), args.thr
+            synth_targets(cfg, synth_samples, args.source), args.thr
         )
         report(f"SYNTHETIC rendered targets ({args.source})", stats_s, n_s, args.thr)
         print("\nCompare synthetic and real distributions; a small empty fraction "

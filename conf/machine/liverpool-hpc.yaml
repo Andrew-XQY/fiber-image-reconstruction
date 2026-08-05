@@ -12,15 +12,21 @@ paths:
 
     processed_chromox_cropped: "/workspace/dataset/CLEAR25_Chromox_Cropped"
 
-    processed_405_background_256: "/workspace/dataset/405_background_256"
-    processed_405_realbeam_random_256: "/workspace/dataset/405_realbeam_random_256"
-    processed_405_realbeam_raster_256: "/workspace/dataset/405_realbeam_raster_256"
-    processed_405_stimuation_large_256: "/workspace/dataset/405_stimuation_large_256"
-    processed_405_realbeam_eval_256: "/workspace/dataset/405_realbeam_eval_256"
+    # Keep these as extensionless extraction targets. XFlow resolves a missing
+    # directory from a same-name sibling archive such as 405_background_256.tar.
+    processed_405_background_256: "/workspace/dataset/processed/Friday/405_background_256"
+    processed_405_realbeam_random_256: "/workspace/dataset/processed/Friday/405_realbeam_random_256"
+    processed_405_realbeam_raster_256: "/workspace/dataset/processed/Friday/405_realbeam_raster_256"
+    processed_405_stimuation_large_256: "/workspace/dataset/processed/Friday/405_stimuation_large_256"
+    processed_405_realbeam_eval_256: "/workspace/dataset/processed/Friday/405_realbeam_eval_256"
 
-    processed_690_background_256: "/workspace/dataset/690_background_256"
-    processed_690_reflection_large_256: "/workspace/dataset/690_reflection_large_256"
-    processed_690_realbeam_256: "/workspace/dataset/690_realbeam_256"
+    processed_690_background_256: "/workspace/dataset/processed/Thursday/690_background_256"
+    processed_690_reflection_large_256: "/workspace/dataset/processed/Thursday/690_reflection_large_256"
+    processed_690_realbeam_256: "/workspace/dataset/processed/Thursday/690_realbeam_256"
+
+    processed_670_background_256: "/workspace/dataset/processed/Wednesday/670_background_256"
+    processed_670_large_256: "/workspace/dataset/processed/Wednesday/670_large_256"
+    processed_670_realbeam_256: "/workspace/dataset/processed/Wednesday/670_realbeam_256"
 
 
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"

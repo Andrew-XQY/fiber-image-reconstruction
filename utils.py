@@ -166,6 +166,10 @@ def _config_path_fingerprints(node) -> list:
             and (key == "background_source" or key.endswith(("_file", "_path")))
         ):
             path = Path(value).expanduser()
+            # Background transforms resolve same-name archives lazily. Resolve
+            # them here so a first HPC run fingerprints the extracted data too.
+            if key == "background_source" and path.suffix.lower() != ".db":
+                path = resolve_resource_dir(path)
             if path.exists():
                 paths.add(path.resolve())
 
@@ -433,6 +437,10 @@ def build_datasets(config: dict) -> dict:
             v = simulation_cfg.get(key)
             return tuple(v) if v is not None else None
 
+        component_params = simulation_cfg.get("component_params")
+        if component_params is not None:
+            component_params = deepcopy(list(component_params))
+
         return canvas.pattern_stream(
             std_1=simulation_cfg["std_1"],
             std_2=simulation_cfg["std_2"],
@@ -444,6 +452,10 @@ def build_datasets(config: dict) -> dict:
             intensity_range=_as_range("intensity_range"),
             center_radius_range=_as_range("center_radius_range"),
             aspect_range=_as_range("aspect_range"),
+            orientation_range=_as_range("orientation_range"),
+            center_angle_range=_as_range("center_angle_range"),
+            shared_center=simulation_cfg.get("shared_center", False),
+            component_params=component_params,
         )
 
     # ====================================

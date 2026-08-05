@@ -27,3 +27,7 @@ paths:
     processed_690_background_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Thursday/690_background_256"
     processed_690_reflection_large_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Thursday/690_reflection_large_256"
     processed_690_realbeam_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Thursday/690_realbeam_256"
+
+    processed_670_background_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Wednesday/670_background_256"
+    processed_670_large_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Wednesday/670_large_256"
+    processed_670_realbeam_256: "/Users/andrewxu/Desktop/AI_Workspace/dataset/processed/Wednesday/670_realbeam_256"
