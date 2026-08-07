@@ -485,6 +485,17 @@ def build_datasets(config: dict) -> dict:
         sources={"connection": train_db_path, "sql": config["sql"][train_sql_key]},
         output_config={"list": provider_output_column},
     )
+    max_basis_samples = config["data"].get("max_basis_samples")
+    if max_basis_samples is not None:
+        max_basis_samples = int(max_basis_samples)
+        if max_basis_samples <= 0:
+            raise ValueError("data.max_basis_samples must be positive")
+        if len(train_provider) > max_basis_samples:
+            train_provider = train_provider.subsample(
+                n_samples=max_basis_samples,
+                seed=int(config["seed"]),
+                strategy="random",
+            )
     pattern_source_provider = SqlProvider(
         sources={"connection": pattern_db_path, "sql": config["sql"][pattern_sql_key]},
         output_config={"list": provider_output_column},
