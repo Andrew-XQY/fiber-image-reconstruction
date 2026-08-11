@@ -140,7 +140,11 @@ def _fingerprint_path(path: Path) -> dict:
         raise FileNotFoundError(f"Contract dependency is missing: {path}")
 
     digest = hashlib.sha256()
-    files = sorted(item for item in path.rglob("*") if item.is_file())
+    files = sorted(
+        item
+        for item in path.rglob("*")
+        if item.is_file() and item.name != ".DS_Store"
+    )
     for item in files:
         digest.update(item.relative_to(path).as_posix().encode("utf-8"))
         digest.update(b"\0")
