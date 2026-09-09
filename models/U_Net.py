@@ -1,4 +1,3 @@
-# unet_pytorch.py
 from __future__ import annotations
 import math
 import os
@@ -97,7 +96,6 @@ class DownsampleBlockUNet(nn.Module):
 class UpsampleBlock(nn.Module):
     """
     Deconv(same, stride=2, no bias) -> BatchNorm -> [Dropout(0.5)] -> ReLU.
-    (Same as in your autoencoder.)
     """
     def __init__(self, in_ch: int, out_ch: int, kernel_size: int, apply_dropout: bool):
         super().__init__()
@@ -133,11 +131,10 @@ class FuseBlock(nn.Module):
 
 class UNet(nn.Module):
     """
-    Minimal 'classic' U-Net built from your autoencoder:
+    U-Net with convolutional encoder and decoder blocks:
     - MaxPool for downsampling
     - Skip connections (pre-pool features)
     - Deconv upsampling + fuse conv
-    - Same save/load API
     """
     def __init__(
         self,
@@ -240,7 +237,7 @@ class UNet(nn.Module):
         h = self.final_conv(h)
         return self.final_act(h)
 
-    # ---------------- save/load API (same shape as your autoencoder) ----------------
+    # ---------------- Save/load ----------------
 
     def save_model(self, save_dir: str, model_name: str = "model") -> str:
         """Save a single .pt with state_dict + minimal architecture info."""

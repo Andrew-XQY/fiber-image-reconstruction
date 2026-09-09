@@ -1,40 +1,66 @@
-# Multimode Fiber Image Reconstruction (ML/AI Models)
+# Fiber image reconstruction
 
-This project explores **image-based machine learning models** for reconstructing images transmitted through multimode optical fibers.  
-The goal is to test and compare the performance of different ML/AI models for multimode fiber input–output image reconstruction based on the loss.
+## Overview
 
----
+This project compares models for reconstructing beam images from multimode-fiber camera images. Its CLEAR26 experiments use XFlow to train on synthetic image pairs built from measured camera responses and beam patterns, then validate on real camera pairs. Experiment configs define the data, model and training settings.
 
-## Project Structure
-- **`.py` files** → model architectures and utility functions  
-- **`.yaml` files** → experiment configurations (hyperparameters, dataset paths, training settings)  
-- **`.ipynb` notebooks** → coordinate training, evaluation, and visualization  
+## Minimal example
 
----
+This example uses `CLEAR26_sgm_cam3.yaml`: cam3 is the fiber input, cam2 is the beam target, and the model is a convolutional autoencoder (CAE).
 
-## Requirements
-- Python 3.9+  
-- [PyTorch](https://pytorch.org/)  
-- [xflow](https://pypi.org/project/xflow-py/) package  
-
-Install `xflow` via pip:
+Use a Python 3.12 environment. Clone both repositories into the same folder and install:
 
 ```bash
-pip install xflow-py
-```
-
-```bash
+git clone https://github.com/Andrew-XQY/XFlow.git
 git clone https://github.com/Andrew-XQY/fiber-image-reconstruction-comparison.git
+cd fiber-image-reconstruction-comparison
+python -m pip install -e "../XFlow[ml_torch,ext]" omegaconf opencv-python
 ```
+
+Create `conf/machine/local.yaml`. Keep these keys and replace the paths with your processed CLEAR26 dataset folders:
+
+```yaml
+paths:
+  datasets:
+    processed_405_background_256: "D:/data/background"
+    processed_405_stimuation_large_256: "D:/data/basis"
+    processed_405_realbeam_eval_256: "D:/data/evaluation"
+  output_root: "./results/first-run"
+```
+
+Each dataset folder needs `dataset.db` with the camera/sample metadata and its referenced 16-bit, 256-by-256 images. The datasets are not included. Choose a new output folder for each run.
+
+Save this as `run_example.py` in the repository root. It selects the machine profile and experiment, then calls the training entry point:
+
+```python
+import os
+
+os.environ["MACHINE"] = "local"
+os.environ["EXPERIMENT_CONFIG"] = "CLEAR26_sgm_cam3"
+
+from train import main
+
+main()
+```
+
+Run it from the repository root:
 
 ```bash
-git pull
+python run_example.py
 ```
 
----
+Training saves `model.pt`, the run config, `history.json` and reconstruction previews in `results/first-run`.
 
-## Collaboration
+## Workflow
 
-This project is actively developed by Andrew Xu, with HAL assisting as an AI research copilot for code, debugging, and documentation support.
+For this config, Gaussian patterns combine the measured basis into synthetic training pairs. `utils.py` builds the data providers and pipelines, `models/CAE.py` defines the model, and `train.py` runs training.
 
-
+```mermaid
+flowchart TD
+    A["local.yaml and CLEAR26_sgm_cam3.yaml"] --> B["Data providers: measured basis and backgrounds"]
+    A --> E["Real camera pairs for validation"]
+    B --> C["XFlow pipeline: Gaussian patterns into training pairs"]
+    C --> D["CAE model and XFlow trainer"]
+    E --> D
+    D --> F["Saved model, config and training history"]
+```

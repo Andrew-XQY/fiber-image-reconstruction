@@ -1,4 +1,4 @@
-"""Resuable components, Run once for all evaluations"""
+"""Shared plotting and metrics for beam reconstruction evaluation."""
 
 from __future__ import annotations
 
@@ -113,8 +113,6 @@ def apply_optional_threshold_filter(
     return filter_df_by_threshold(df, target_column=target_column, threshold=threshold, keep=keep)
 
 
-# Global validation filter controls used by downstream cells below.
-# Leave disabled by default so existing evaluation behavior is unchanged.
 
 
 import numpy as np
@@ -380,7 +378,7 @@ def plot_residual_hist_pct(df, param_type="centroid", fit_method="gaussian",
                            legend_frameon=True,
                            scale=1.0,
                            y_num_ticks=None):
-    # Pre-pass: gather residuals per dim so we can size axes adaptively.
+    # Gather residuals per dimension for adaptive axis limits.
     per_dim = []
     pooled = []
     for dim in dims:

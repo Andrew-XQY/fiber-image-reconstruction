@@ -1,6 +1,4 @@
-# ====================
-# Encoder Regressor fiber image reconstruction configuration file
-# ====================
+# Encoder regressor for beam-parameter reconstruction.
 
 seed: &seed 42 # 42, 168, 500
 name: &config "ERN.yaml"
@@ -62,7 +60,7 @@ data:
       params:
         batch_size: *batch                # Number of images per batch
         shuffle: True                     # Shuffle dataset
-        num_workers: 0                    # Number of worker threads for data loading
+        num_workers: 0                    # Number of data-loader worker processes.
         prefetch_factor: 2                # Number of batches to prefetch
         seed: *seed                       # Random seed for reproducibility
 

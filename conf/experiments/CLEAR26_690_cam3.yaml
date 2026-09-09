@@ -1,43 +1,17 @@
-# ====================
-# CLEAR 2026 690 nm reflection reconstruction - cam3 input, cam2 target
-# Derived from CLEAR26_cam3; model and training workflow are unchanged.
-# Calibrated on 2026-07-22, RE-CALIBRATED 2026-07-23 (saturation fix):
-#   reflection basis ROI>=0.55: 1764 pairs; realbeam eval ROI>=0.80:
-#   570 pairs -> 285 validation / 285 test.
-#   Eval peak p99.5/max: cam3 1969.9/2092.5 -> /2200;
-#   cam2 448.8/481.8 -> /500.  (unchanged, verified 2026-07-23)
-#
-#   2026-07-23 POST-MORTEM of run CLEAR26_690_cam3-20260723113312:
-#   the previous scales 0.65/2.70 were fit by matching POST-CLIP energy, so
-#   the combinator's clip_output [0,1] hid a 1.6x overshoot. Measured
-#   pre-clip: reflection-basis cam2 spots carry E = sum/500 ~ 377, so every
-#   rendered sigma-8 kernel peaked at E/(2*pi*64) * 2.70 ~ 2.6 alone; with
-#   coeff-map mass ~2.5-3.2 per sample, 49% of real-pattern targets and 19%
-#   of inputs clipped (flat-top blobs, train input energy 1.64x eval). The
-#   model could not learn from saturated pairs: val_overall_mae 0.068 vs
-#   0.0057 for the 405 reference run.
-#   Fix (verified by pre-clip probe, 200-sample production mix, vs 200 eval
-#   frames): scales 0.65->0.31 (input), 2.70->1.18 (target); pattern stream
-#   moved to the ROI>=0.80 eval query (narrower coeff-sum spread 2.1-4.8,
-#   was 1.0-4.9 at ROI>=0.55). Result: input clipping 0%, target 0.8%
-#   marginal (p99.5 pre-clip peak ~1.02), synth/eval energy 1.03 (input),
-#   0.94 (target), footprint 0.097 vs 0.09 eval; matches the operating
-#   point of the working 405 optimized_SGM run (peaks 0.76-1.14x eval,
-#   <5% marginal clipping). NEVER recalibrate scales on post-clip stats.
-# Run with: EXPERIMENT_CONFIG=CLEAR26_690_cam3
-# ====================
+# CLEAR 2026, 690 nm reflection: cam3 input, cam2 target.
+# Calibration recorded on 2026-07-22 and revised on 2026-07-23.
+# Basis ROI>=0.55: 1764 pairs; evaluation ROI>=0.80: 570 pairs
+# at calibration, split into 285 validation and 285 test pairs.
+# The 70/30 real-pattern/SGM mixture reads all evaluation-query targets.
+# Basis scales were fitted before clipping to avoid hiding saturation.
 
 seed: &seed 42
 name: &config "CLEAR26_690_cam3.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Train on 690_reflection_large_256, cam3 fiber -> cam2 screen, and evaluate
-  on 690_realbeam_256. SQL pairs cameras by sample_id/run_id and emits
-  "input_path|target_path". As in CLEAR26_cam3, the 70/30 pattern stream
-  reads cam2 coefficient maps from the second dataset - since 2026-07-23 via
-  the same ROI>=0.80 eval query (beam-prior shapes only; accepted overlap
-  with the val/test image pairs, which are split from that query).
+  Reconstruct cam3 fiber images as cam2 screen images using a measured reflection basis.
+  Training combines the basis with 70% real-target coefficient maps from the unsplit evaluation database and 30% SGM maps.
 
 paths:
   output: ${paths.output_root}
@@ -53,15 +27,7 @@ model:
   encoder:          [64,   128, 128, 256, 512, 1024]
   decoder:          [1024, 512, 256, 128, 128, 64  ]
   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-  # 2026-07-23 ablation arm A: dropout OFF. NOT a proven fix -
-  # 405_cam3_with_beam_prior had dropout ON with excellent centroids, so
-  # dropout alone does not cause the ring artifact seen in
-  # 690_cam3-20260723134626_with_prior (azimuthal err 1.43x radial).
-  # Hypothesis being tested: 690 reflection inputs carry angle as ~4%-RMS
-  # modulations on a dominant donut envelope (pairwise corr 0.72-0.99), and
-  # Dropout2d(0.5) at the two deepest decoder blocks suppresses such weak
-  # features, unlike 405 speckle. Revert to [1,1,0,0,0,0] if arm A shows no
-  # centroid gain. See AI_Workspace/CLEAR26_690_fix/REPORT.md.
+  # Dropout disabled as an ablation for weak angular features in reflection inputs.
   apply_dropout:    [0,    0,   0,   0,   0,   0   ]
   final_activation: sigmoid
 
@@ -106,10 +72,8 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  # Minimal retune of the legacy 3-Gaussian prior to 690 nm cam2 coefficient
-  # maps (34x34): mean peak 0.059 vs 0.060 real, sum 1.99 vs 2.52, and
-  # 44 vs 40 active cells above 0.02. The rendered production mixture is
-  # calibrated below by the target kernel and basis scales.
+  # Three-Gaussian prior calibrated against measured 690 nm cam2 coefficient
+  # maps at 34x34 resolution. Basis scales calibrate the rendered mixture.
   total_Guassian_num: 3
   max_pixel_value: 1.0
   max_intensity: 0.018
@@ -157,10 +121,8 @@ data:
   dataset_sources: ["processed_690_reflection_large", "processed_690_realbeam_256"]
   train_sql_key: clear26_690_cam3_to_cam2_basis
   eval_sql_key: clear26_690_cam3_to_cam2_eval
-  # 2026-07-23: pattern stream now uses the ROI>=0.80 eval query. The old
-  # ROI>=0.55 pattern set added partially-cropped beams whose coeff-sum tail
-  # (up to 4.9) drove target saturation; same frames were already a subset,
-  # so train/eval overlap is unchanged in kind (accepted beam prior).
+  # The real-pattern stream uses the full ROI>=0.80 evaluation query,
+  # including the targets later assigned to validation and test.
   pattern_sql_key: clear26_690_cam3_to_cam2_eval
   provider_output_column: image_pair
   total_train_samples: 5000
@@ -177,8 +139,8 @@ data:
           transforms:
             - name: "add_parent_dir"
             - name: "add_parent_dir"
-      # load_image16: PIL-based deterministic 16-bit decode, (1,H,W) int counts;
-      # raises on a silent 8-bit source.
+      # load_image16 returns 16-bit integer counts with shape (1, H, W)
+      # and rejects 8-bit source images.
       - name: "multi_transform"
         params:
           transforms:
@@ -218,9 +180,8 @@ data:
                 current_max: 500.0
   basis_transforms:
     torch:
-      # The energy-preserving centroid kernel fills gaps in the sparse 690 nm
-      # basis rendering. Sigma 8 matches rendered peak/footprint without
-      # changing per-basis target energy.
+      # Energy-preserving centroid kernels fill gaps in the sparse reflection
+      # basis. Sigma 8 was calibrated against evaluation peak and footprint.
       - name: "multi_transform"
         params:
           transforms:
@@ -228,11 +189,9 @@ data:
             - name: "torch_render_centroid_kernel"
               params:
                 sigma: 8.0
-      # 2026-07-23 recalibration on PRE-CLIP statistics (see header):
-      # input 0.31 -> synth input energy 1.03x eval, peak p99.5 0.88, 0% clip;
-      # target 1.18 -> kernel peak/basis ~1.12 mean, assembled target energy
-      # 0.94x eval, 0.8% marginal clip. Old post-clip-fit values 0.65/2.70
-      # saturated 19%/49% of samples - do not restore them.
+      # Basis scales recalibrated against pre-clipping evaluation statistics
+      # on 2026-07-23. Fit scales before clipping: the earlier post-clipping
+      # fit hid saturation.
       - name: "multi_transform"
         params:
           transforms:
@@ -258,9 +217,8 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
-      # Same cam3 acquisition settings as 405 nm: retain the measured camera
-      # model a=0.118, b=4.82 and update only count_scale to the /2200
-      # normalizer. Temporal dark variance was also comparable (1.86 vs 1.61).
+      # Noise coefficients reuse the cam3 calibration from the 405 nm acquisition.
+      # count_scale follows the 2200-count input normalizer.
       - name: "multi_transform"
         params:
           transforms:
@@ -301,8 +259,7 @@ image_generator:
         interpolation: "area"
     - name: "remap_range"
       params:
-        # Coefficient maps are raw Mono12 data, so this intentionally remains
-        # /4095 rather than using the train/eval remap constants above.
+        # Coefficient maps retain the raw Mono12 /4095 scale.
         current_min: 0.0
         current_max: 4095.0
         target_min: 0.0
@@ -314,7 +271,7 @@ image_generator:
         interpolation: "bilinear"
 
 weighted_stream:
-  # Unchanged CLEAR26_cam3 production semantics.
+
   real_weight: 0.7
   sgm_weight: 0.3
 

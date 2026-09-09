@@ -1,37 +1,17 @@
-# ====================
-# CLEAR 2026 690 nm reflection reconstruction - cam1 input, cam2 target
-# Minimal port of CLEAR26_690_cam3_v2 (the production 690 recipe: per-sample
-# L2 normalization, positive SGM prior, 70/30 real beam prior, dropout off,
-# 250 epochs). ONLY the input-camera constants were re-measured; pipeline
-# structure, target side (cam2) and all v2 semantics are unchanged.
-#
-# cam1 calibration 2026-07-28 (probe_cam1.py, 570 eval / 1773 basis pairs):
-#   normalizer   cam1 peak p99.5 1401.7 * 1.07 -> current_max 1500
-#                (cam3 was 2200; cam1 runs dimmer at 690 nm)
-#   sensor noise photon-transfer fit var = 0.195*signal + 4.20 (R^2 0.960)
-#                (cam3: a=0.118 b=4.82) - cam1 is noisier per count here,
-#                keep param_jitter 2.0 to span the estimator's upper bias
-#   basis scale  pre-clip energy match vs eval: 0.335 (cam3: 0.31)
-#   verification through the v2 graph: synth normalized input peak
-#                0.281 (real) / 0.282 (sgm) vs eval 0.291 - matched;
-#                target peaks 0.44/0.50, 0-2% degenerate, no clipping.
-#
-# Expectation note: a ridge decodability probe gave cam1 MAE 0.0315 vs
-# cam3 0.0226 on the same eval split, so cam1 is expected to underperform
-# cam3 (0.00799). Run as a second-view / fusion baseline, not a replacement.
-# Run with: EXPERIMENT_CONFIG=CLEAR26_690_cam1_v2
-# ====================
+# CLEAR 2026, 690 nm reflection: cam1 input, cam2 target.
+# Per-sample L2 normalization; real/SGM pattern weights are 70/30.
+# Cam1 calibration recorded on 2026-07-28 using 1773 basis pairs
+# and 570 evaluation pairs. Real coefficient maps use all ROI>=0.80
+# evaluation-query targets, including validation and test targets.
+# Input noise uses a photon-transfer fit; basis scales use pre-clip energy.
 
 seed: &seed 42
 name: &config "CLEAR26_690_cam1_v2.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  v2 shape-normalized pipeline. Train on 690_reflection_large_256, cam1
-  fiber -> cam2 screen, evaluate on 690_realbeam_256. Input and target are
-  L2-normalized per sample (post-combination / in eval chain), making the
-  task intensity-invariant; eval metrics (centroid, width) are unaffected.
-  Beam prior kept at 70/30 via the ROI>=0.80 eval query.
+  Reconstruct cam1 fiber images as cam2 screen images using a measured reflection basis.
+  Training combines the basis with 70% real-target coefficient maps from the unsplit evaluation database and 30% SGM maps.
 
 paths:
   output: ${paths.output_root}
@@ -47,7 +27,7 @@ model:
   encoder:          [64,   128, 128, 256, 512, 1024]
   decoder:          [1024, 512, 256, 128, 128, 64  ]
   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-  # Ablation arm A carried over from CLEAR26_690_cam3 (see its comments).
+  # Dropout disabled for the reflection-input ablation.
   apply_dropout:    [0,    0,   0,   0,   0,   0   ]
   final_activation: sigmoid
 
@@ -102,11 +82,8 @@ simulation:
   std_1: 0.05
   std_2: 0.10
   distribution: "other"
-  # v2: strictly positive intensity - REQUIRED under per-sample
-  # normalization (near-empty patterns would be eps-amplified into
-  # saturated garbage). Known side effect: all 3 Gaussians are always
-  # live (legacy averaged ~2.7), a mild morphology shift - measured
-  # acceptable by probe_v2_prior (see CLEAR26_690_fix/REPORT.md).
+  # Strictly positive intensities keep all Gaussian components active and
+  # reduce near-empty coefficient maps before per-sample normalization.
   intensity_range: [0.004, 0.018]
   process_functions:
     - name: "resize"
@@ -119,15 +96,10 @@ simulation:
         fill: 0.0
         interpolation: "area"
 
-# v2: validator intentionally ABSENT. The strictly positive intensity_range
-# already prevents the degenerate near-empty samples that normalization
-# would amplify, and the validator would disable the batched-generation
-# fast path while adding an unprobed ingredient.
+# No rejection validator is enabled. Coefficient intensities are strictly positive.
 
 training:
-  # 2026-07-24: run 690_cam3_v2-20260724090448 hit the 100-epoch cap while
-  # still improving (best val MAE at epoch 99, no early stop). Patience 20
-  # governs the real stop.
+  # Early stopping uses patience 20 within the 250-epoch cap.
   epochs: &epochs 250
   learning_rate: 1.0e-4
   batch_size: &batch 32
@@ -153,7 +125,7 @@ data:
   dataset_sources: ["processed_690_reflection_large", "processed_690_realbeam_256"]
   train_sql_key: clear26_690_cam1_to_cam2_basis
   eval_sql_key: clear26_690_cam1_to_cam2_eval
-  # Beam-prior patterns from the ROI>=0.80 eval query (see CLEAR26_690_cam3).
+  # Coefficient maps come from the unsplit evaluation database.
   pattern_sql_key: clear26_690_cam1_to_cam2_eval
   provider_output_column: image_pair
   total_train_samples: 5000
@@ -193,14 +165,10 @@ data:
                 background_source: ${paths.processed_690_background}
                 camera: "cam2"
                 clip_min: 0.0
-      # Count normalizers unchanged (calibrated 2026-07-22, verified 07-23).
-      # IMPORTANT: this data.transforms chain is ALSO the basis-caching
-      # chain (utils.py extends it with basis_transforms). It must contain
-      # NO per-sample normalization - basis frames enter the combinator in
-      # calibrated raw units so mixture weighting, the reflection field's
-      # spatial nonuniformity, and the sensor-noise count mapping stay
-      # physical. Per-sample normalization lives in combinator.transforms
-      # (train) and eval_extra_transforms (eval) ONLY.
+      # Fixed count normalizers are calibrated on evaluation images.
+      # This chain also builds the basis cache: preserve calibrated count units
+      # here. Per-sample normalization follows combination for training and is
+      # applied separately in eval_extra_transforms for evaluation.
       - name: "multi_transform"
         params:
           transforms:
@@ -212,9 +180,8 @@ data:
               params:
                 current_min: 0.0
                 current_max: 500.0
-  # v2: appended ONLY to the eval/val/test chain by the utils.py hook -
-  # mirrors combinator.transforms so train and eval live in the same
-  # normalized space. Both slots are torch tensors here.
+  # Evaluation-only normalization mirrors the generated training samples.
+  # Both evaluation slots are torch tensors.
   eval_extra_transforms:
     torch:
       - name: "multi_transform"
@@ -240,9 +207,8 @@ data:
             - name: "torch_render_centroid_kernel"
               params:
                 sigma: 8.0
-      # Kept from the 07-23 recalibration: 0.31 keeps the sensor-noise
-      # count-domain mapping honest; 1.18 is inert under target L2 norm
-      # but kept so pre-normalization diagnostics stay comparable.
+      # Basis scales were fitted against pre-normalization evaluation energies.
+      # Apply these before count-domain sensor noise and per-sample L2 normalization.
       - name: "multi_transform"
         params:
           transforms:
@@ -268,7 +234,7 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
-      # Physical order: sensor noise in counts FIRST, then normalization.
+      # Apply sensor noise in count units before per-sample normalization.
       - name: "multi_transform"
         params:
           transforms:
@@ -281,9 +247,8 @@ combinator:
                 gain: null
                 clip_min: 0.0
             - null
-      # v2 per-sample normalization. Type note: input slot receives a torch
-      # tensor (from torch_sensor_noise) -> torch_l2_normalize; target slot
-      # receives numpy from the combinator -> numpy 'l2_normalize'.
+      # The input is a torch tensor after sensor-noise injection; the target
+      # is a NumPy array. Use the matching L2 transform for each slot.
       - name: "multi_transform"
         params:
           transforms:

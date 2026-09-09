@@ -3,32 +3,30 @@ from omegaconf.errors import OmegaConfBaseException
 from pathlib import Path
 import os, socket
 
-# Structured mapping (hostname substring -> machine profile)
+# Hostname substring to machine profile.
 HOST_TO_MACHINE = {
-    "mac": "mac-andrewxu",                  # if hostname contains "mac" → use conf/machine/mac-andrewxu.yaml
-    "mws-147574r": "win-qiyuanxu",          # if hostname contains "mws-147574r" → use conf/machine/win-qiyuanxu.yaml
-    "pcbe15789": "win-xqiyuan",             # if hostname contains "pcbe15789" → use conf/machine/win-xqiyuan.yaml
-    "": "liverpool-hpc",                    # direct set in env variable to tell use this machine
-    # add more as needed, add new hostname + machine profile pairs
+    "mac": "mac-andrewxu",
+    "mws-147574r": "win-qiyuanxu",
+    "pcbe15789": "win-xqiyuan",
+    "": "liverpool-hpc",                    # Default profile for unmatched hostnames.
 }
 
 
 def detect_machine() -> str:
-    """Return machine profile from env MACHINE or by hostname mapping.
-    Raises RuntimeError if no mapping is found."""
-    # 1. If explicitly set, trust it
+    """Return the MACHINE override or first matching hostname profile."""
+    # Explicit environment override.
     machine = os.getenv("MACHINE")
     if machine:
         print("Using machine profile:", machine)
         return machine
 
-    # 2. Otherwise, try to detect from hostname
+    # Match the hostname against configured profiles.
     host = socket.gethostname().lower()
     for key, profile in HOST_TO_MACHINE.items():
         if key in host:
             return profile
 
-    # 3. Nothing matched -> fail
+    # No matching profile.
     raise RuntimeError(
         f"[config_utils] Could not resolve machine profile from hostname='{host}'. "
         f"Please set MACHINE env variable to one of: {list(HOST_TO_MACHINE.values())}"
@@ -77,7 +75,7 @@ def load_config(
 ) -> dict:
     """
     If prior_machine=True, machine config overwrites experiment config.
-    Otherwise (default), experiment overwrites machine (original behavior).
+    Otherwise, experiment config overwrites machine config.
 
     If resolve=True, resolve values one by one. Missing interpolations are kept
     as their original placeholder strings instead of raising an error.
@@ -96,7 +94,7 @@ def load_config(
         # machine wins
         cfg = OmegaConf.merge(base, exp, mach)
     else:
-        # experiment wins (original)
+        # experiment wins
         cfg = OmegaConf.merge(base, mach, exp)
 
     if resolve:

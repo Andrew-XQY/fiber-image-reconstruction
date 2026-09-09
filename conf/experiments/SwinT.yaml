@@ -1,6 +1,4 @@
-# ====================
-# Swin-Transformer fiber image reconstruction configuration file
-# ====================
+# Swin Transformer for fiber-image reconstruction.
 
 seed: &seed 500                           # 42, 168, 500
 name: &config "SwinT.yaml"
@@ -30,7 +28,7 @@ training:
   betas: [0.9, 0.999]
   eps: 1.0e-8
   weight_decay: 0.05
-  warmup_ratio: 0.1                       # Number of warmup epochs
+  warmup_ratio: 0.1                       # Fraction of training epochs used for warmup.
 
 callbacks:
   # - name: "torch_grad_monitor"
@@ -82,7 +80,7 @@ data:
       params:
         batch_size: *batch                # Number of images per batch
         shuffle: True                     # Shuffle dataset
-        num_workers: 0                    # Number of worker threads for data loading
+        num_workers: 0                    # Number of data-loader worker processes.
         prefetch_factor: 2                # Number of batches to prefetch
         seed: *seed                       # Random seed for reproducibility
 

@@ -7,23 +7,23 @@
 #   # apptainer pull torch_2.5_py312.sif docker://ghcr.io/andrew-xqy/ml-containers:2.5-py3.12-cuda12.1
 #   mkdir -p ~/dataset ~/results ~/results/slurm ~/code
 #
-# Check which --partition are available on my cluster:
+# List available partitions:
 #   sinfo
 #
-# Submit and running the job:
+# Submit the job:
 #   sbatch submit.sh
 #
-# DOS UNIX string convert (if needed):
+# Convert Windows line endings if needed:
 #   dos2unix submit.sh
 #
 # Quick GPU test (optional):
 #   apptainer exec --nv ~/torch_2.5_py312.sif python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.version.cuda)"
 #
-# Check sbatch detailed info:
+# Inspect a submitted job:
 #   scontrol show job <id>
 #
-# Download results e.g.
-# scp -r qiyuanxu@barklaviz2.liv.ac.uk:/users/qiyuanxu/results /Users/andrewxu/Desktop/HPC
+# Download results:
+#   scp -r user@cluster:/path/to/results ./results
 
 #SBATCH --job-name=beam_image_reconstruction_model_training
 #SBATCH --output=results/slurm/training-%j.out
@@ -49,7 +49,7 @@ echo "Using container image: $IMG"  # for debug check
 # Match SBATCH log path (relative to submit dir)
 mkdir -p results/slurm
 
-# Update the core repo/code before running, make sure everything synched
+# Update both repositories before running.
 git -C "$CODE/XFlow" pull
 git -C "$CODE/examples/fiber-image-reconstruction-comparison" pull
 

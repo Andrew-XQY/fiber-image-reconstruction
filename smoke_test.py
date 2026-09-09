@@ -1,13 +1,11 @@
-"""5-minute smoke test before full HPC training.
+"""Check generated beam targets and data throughput before training.
 
-Run from repo root (after installing the patched pattern_gen.py + utils.py):
+Run from the repository root with the datasets and XFlow installed:
     EXPERIMENT_CONFIG=CLEAR26_sgm_cam3 python smoke_test.py
 
-Checks:
-  1. patched files installed together (else: TypeError unexpected kwarg here)
-  2. generated TARGET marginals land in the real-beam bands
-  3. generation throughput with validator on (per-sample path)
-  4. dumps smoke_samples.png -- eyeball inputs/targets before committing GPU hours
+Reports dataset construction time, target marginals against the reference
+bands, and generation throughput. Saves input/target previews to
+smoke_samples.png.
 """
 import os, time
 import numpy as np

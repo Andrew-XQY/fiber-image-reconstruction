@@ -191,7 +191,7 @@ class SwinBlock(nn.Module):
 class PatchEmbed(nn.Module):
     def __init__(self, in_chans=1, embed_dim=96, patch_size=4):
         super().__init__()
-        # change only this line: kernel_size=7, padding=3 (overlaps), keep stride=patch_size
+        # Overlapping 7x7 patches with stride=patch_size.
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=7, stride=patch_size, padding=3, bias=True)
         self.norm = nn.LayerNorm(embed_dim)
         
@@ -314,7 +314,7 @@ class SwinUNet(nn.Module):
 
         # Reconstruction head
         self.norm_out = nn.LayerNorm(embed_dim)
-        # NEW: light post-conv to blend window boundaries at token resolution
+        # Convolutions blend window boundaries at token resolution.
         self.post = nn.Sequential(
             nn.Conv2d(embed_dim, embed_dim, 3, padding=1, bias=False),
             nn.GELU(),
@@ -352,7 +352,7 @@ class SwinUNet(nn.Module):
 
         # tokens -> logits map at patch resolution, then upsample back to img_size
         y = self.norm_out(y1).view(B, H, W, -1).permute(0, 3, 1, 2).contiguous()  # B,C,H/ps,W/ps
-        y = self.post(y)  # <-- NEW: mixes across windows at token grid
+        y = self.post(y)  # Mix features across token windows.
         y = F.interpolate(y, scale_factor=self.patch_size, mode="bilinear", align_corners=False)
         y = self.proj_out(y)  # (B, num_classes, img_size, img_size)
         return y

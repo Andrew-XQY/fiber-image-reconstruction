@@ -6,7 +6,7 @@ print(os.getcwd())
 from config_utils import detect_machine
 machine = detect_machine() 
 
-# if win, windows test in machine then auto switch to windows path, otherwise use mac path
+# Notebook paths for the detected Windows or macOS profile.
 if any(win in machine for win in ["win", "windows"]): # windows
     dirs = {
         "merged_db_path": "C:/Users/qiyuanxu/Desktop/clear_2025_dataset.db",

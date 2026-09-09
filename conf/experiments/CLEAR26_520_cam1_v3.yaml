@@ -1,46 +1,16 @@
-# ====================
-# CLEAR 2026 520 nm reconstruction - cam1 input, cam2 target
-# Dataset port of CLEAR26_670_cam1_v3, calibrated on 2026-08-06.
-# Pipeline topology and training hyperparameters are inherited unchanged.
-#
-# 2026-08-06 CALIBRATION (see skills/calibration.md).
-#   Eval set: 520_realbeam_256 cam1->cam2 ROI>=0.80, 666 pairs.
-#   Basis:    520_stimulation_large_256 ROI>=0.55, 914 pairs.
-#   Pattern:  all 666 eval-query pairs, supplied unsplit to the real prior.
-#
-#   Measured (probe 1, normalizer) on bg-subtracted eval counts:
-#     cam1 p50 858.1  p99.5 1503.1  max 1565.7  -> current_max 1700
-#     cam2 p50 995.6  p99.5 1233.6  max 1260.6  -> current_max 1400
-#   Measured (probe 2, sensor noise) over all 666 cam1 eval frames, 0..1020:
-#     var = 0.250 * signal + 2.59 (R^2 0.980), count_scale 1700.
-#     The full set avoids the acquisition-order drift in 200-frame slices.
-#
-#   Measured (probe 3) over the full seeded 5000-sample stream before L2:
-#     torch_scale input 0.148 -> energy 4103.9/4095.3 (synth/real = 1.00)
-#     torch_scale target 0.144 -> energy 1829.8/1829.5 (synth/real = 1.00)
-#     downstream clipping 0% in both slots (5000 synthetic / 333 real).
-#
-#   Measured (probe 4) in final L2 x16 target space. Full 5000-sample
-#   60/40 mixed stream vs all 666 real eval targets (means):
-#                     peak   sigma_x  sigma_y  radius  footprint
-#     real eval       .468     .101     .095    .215      .087
-#     mixed train     .473     .100     .096    .217      .091
-#   The p5-p95 intervals overlap for all five marginals; empty rate is 0%.
-#   Unlike 670 nm, the 520 targets are near-round, so the SGM uses a mildly
-#   eccentric round core+halo with a broad measured orientation range.
-# Run with: EXPERIMENT_CONFIG=CLEAR26_520_cam1_v3
-# ====================
+# CLEAR 2026, 520 nm: cam1 input, cam2 target; per-sample L2 normalization.
+# Calibration recorded on 2026-08-06 using evaluation images.
+# Basis: 520_stimulation_large_256, ROI>=0.55 (914 pairs at calibration).
+# Evaluation: 520_realbeam_256, ROI>=0.80 (666 pairs at calibration).
+# All evaluation targets feed the real-pattern stream; weights are 60/40.
 
 seed: &seed 42
 name: &config "CLEAR26_520_cam1_v3.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Calibrated 520 nm cam1-input port of CLEAR26_670_cam1_v3. Train on
-  520_stimulation_large_256, cam1 fiber -> cam2 screen, and evaluate on
-  520_realbeam_256. Input and target remain L2-normalized per sample.
-  Beam-prior mixing remains 60/40 and uses all ROI>=0.80 evaluation-query
-  targets as the unsplit real-pattern prior.
+  Reconstruct cam1 fiber images as cam2 screen images using a measured stimulation basis.
+  Training combines the basis with 60% real-target coefficient maps from the unsplit evaluation database and 40% SGM maps.
 
 paths:
   output: ${paths.output_root}
@@ -56,7 +26,7 @@ model:
   encoder:          [64,   128, 128, 256, 512, 1024]
   decoder:          [1024, 512, 256, 128, 128, 64  ]
   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-  # Dropout setting inherited unchanged from CLEAR26_670_cam1_v3.
+
   apply_dropout:    [0,    0,   0,   0,   0,   0   ]
   final_activation: sigmoid
 
@@ -101,8 +71,7 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  # The 520 cam2 targets are near-round; use concentric round core/halo
-  # components instead of the horizontally aligned 670 nm prior.
+  # Concentric core/halo components model the near-round cam2 targets.
   total_Guassian_num: 2
   max_pixel_value: 1.0
   max_intensity: 0.10   # Legacy fallback; intensity_range is active below.
@@ -115,7 +84,7 @@ simulation:
   distribution: "other"
   intensity_range: [0.060, 0.100]
   aspect_range: [1.0, 1.20]
-  # The mildly eccentric real targets have a broad, weak horizontal tendency.
+  # Orientation range fitted to the measured target distribution.
   orientation_range: [-55.0, 40.0]
   center_radius_range: [0.0, 0.340]
   shared_center: true
@@ -137,12 +106,10 @@ simulation:
         fill: 0.0
         interpolation: "area"
 
-# Validator intentionally absent. The strictly positive intensity_range
-# already prevents the degenerate near-empty samples that normalization
-# would amplify; a validator would add an unprobed rejection-selection effect.
+# No rejection validator is enabled. Coefficient intensities are strictly positive.
 
 training:
-  # Inherited from 690 v3: 250-epoch cap with patience-20 early stopping.
+
   epochs: &epochs 250
   learning_rate: 1.0e-4
   batch_size: &batch 32
@@ -168,7 +135,7 @@ data:
   dataset_sources: ["processed_520_stimulation_large", "processed_520_realbeam_256"]
   train_sql_key: clear26_520_cam1_to_cam2_basis
   eval_sql_key: clear26_520_cam1_to_cam2_eval
-  # Independent provider: all eval-query targets feed the prior without splitting.
+  # All evaluation-query targets feed the real-pattern stream without splitting.
   pattern_sql_key: clear26_520_cam1_to_cam2_eval
   provider_output_column: image_pair
   total_train_samples: 5000
@@ -208,14 +175,10 @@ data:
                 background_source: ${paths.processed_520_background}
                 camera: "cam2"
                 clip_min: 0.0
-      # Count normalizers measured for cam1->cam2 on 2026-08-06 (probe 1).
-      # IMPORTANT: this data.transforms chain is ALSO the basis-caching
-      # chain (utils.py extends it with basis_transforms). It must contain
-      # NO per-sample normalization - basis frames enter the combinator in
-      # calibrated raw units so mixture weighting, the reflection field's
-      # spatial nonuniformity, and the sensor-noise count mapping stay
-      # physical. Per-sample normalization lives in combinator.transforms
-      # (train) and eval_extra_transforms (eval) ONLY.
+      # Count normalizers calibrated on evaluation images (2026-08-06).
+      # This chain also builds the basis cache: preserve calibrated count units
+      # here. Per-sample normalization follows combination for training and is
+      # applied separately in eval_extra_transforms for evaluation.
       - name: "multi_transform"
         params:
           transforms:
@@ -227,9 +190,8 @@ data:
               params:
                 current_min: 0.0
                 current_max: 1400.0
-  # v2: appended ONLY to the eval/val/test chain by the utils.py hook -
-  # mirrors combinator.transforms so train and eval live in the same
-  # normalized space. Both slots are torch tensors here.
+  # Evaluation-only normalization mirrors the generated training samples.
+  # Both evaluation slots are torch tensors.
   eval_extra_transforms:
     torch:
       - name: "multi_transform"
@@ -255,10 +217,8 @@ data:
             - name: "torch_render_centroid_kernel"
               params:
                 sigma: 8.0
-      # 2026-08-06 full seeded 5000-sample probe-3 measurements:
-      #   input  4103.9 synthetic / 4095.3 real = 1.00
-      #   target 1829.8 synthetic / 1829.5 real = 1.00
-      # Downstream clipping was 0% in both slots.
+      # Basis scales fitted to pre-L2 evaluation energies using 5000 generated
+      # samples on 2026-08-06.
       - name: "multi_transform"
         params:
           transforms:
@@ -284,13 +244,13 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
-      # Physical order: sensor noise in counts FIRST, then normalization.
+      # Apply sensor noise in count units before per-sample normalization.
       - name: "multi_transform"
         params:
           transforms:
-            # 2026-08-06 probe-2 fit over all 666 cam1 eval frames; using the
-            # full set avoids the acquisition-order drift seen in 200-frame slices.
-            # param_jitter 2.0 adds deliberate factor-two domain randomization.
+            # Sensor-noise fit: all 666 cam1 evaluation frames, 2026-08-06.
+            # The full set includes acquisition-order drift; param_jitter applies
+            # factor-two parameter randomization.
             - name: "torch_sensor_noise"
               params:
                 a: 0.250
@@ -300,9 +260,8 @@ combinator:
                 gain: null
                 clip_min: 0.0
             - null
-      # v2 per-sample normalization. Type note: input slot receives a torch
-      # tensor (from torch_sensor_noise) -> torch_l2_normalize; target slot
-      # receives numpy from the combinator -> numpy 'l2_normalize'.
+      # The input is a torch tensor after sensor-noise injection; the target
+      # is a NumPy array. Use the matching L2 transform for each slot.
       - name: "multi_transform"
         params:
           transforms:

@@ -199,7 +199,7 @@ class Discriminator(nn.Module):
 
 
 # -------------------------
-# (Optional) Losses to mirror your TF code exactly
+# Adversarial and L1 reconstruction losses
 # -------------------------
 LAMBDA = 100
 _bce_logits = nn.BCEWithLogitsLoss(reduction="mean")
