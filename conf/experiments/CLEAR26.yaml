@@ -1,16 +1,14 @@
-# ====================
-# CLEAR 2026 camera-pair reconstruction configuration
-# ====================
+# CLEAR 2026 reconstruction: cam1 input, cam2 target.
+# Measured stimulation basis with a 70/30 real-pattern/SGM mixture.
+# Real coefficient maps come from the unsplit evaluation database.
 
 seed: &seed 42
 name: &config "CLEAR26.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Train on camera-separated CLEAR 2026 processed data. SQL matches camera pairs
-  by sample_id/run_id and emits "input_path|target_path". Training uses the
-  matched pairs as a cached basis for SpatialNearestCombinator; evaluation is
-  loaded from its own SQL key.
+  Reconstruct cam1 fiber images as cam2 screen images using a measured stimulation basis.
+  Training combines the basis with 70% real-target coefficient maps from the unsplit evaluation database and 30% SGM maps.
 
 paths:
   output: ${paths.output_root}
@@ -106,10 +104,8 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  # SGM in [0, 1], tuned to match REAL beam-pattern statistics (530 roi>=0.75
-  # patterns at 34x34: peak=0.103 sum=5.77 cells(>0.002)=219). These params
-  # give peak~0.10 sum~7.5 cells~200 blank~2-6% (verified seeds 1/7/42,
-  # 200 patterns each). Peak driven by area_boost, not max_intensity.
+  # SGM parameters calibrated against measured real-beam coefficient maps at
+  # 34x34 resolution. area_boost_scale controls the peak amplitude.
   total_Guassian_num: 3
   max_pixel_value: 1.0
   max_intensity: 0.05
@@ -173,9 +169,8 @@ data:
           transforms:
             - name: "add_parent_dir"
             - name: "add_parent_dir"
-      # load_image16: PIL-based deterministic 16-bit decode, (1,H,W) int counts;
-      # raises on a silent 8-bit source. Replaces torchvision read_image, whose
-      # 16-bit PNG behavior is version-dependent.
+      # load_image16 returns 16-bit integer counts with shape (1, H, W)
+      # and rejects 8-bit source images.
       - name: "multi_transform"
         params:
           transforms:
@@ -199,11 +194,9 @@ data:
                 background_source: ${paths.processed_405_background}
                 camera: "cam2"
                 clip_min: 0.0
-      # Data-driven normalization (p99.5 of background-subtracted eval peaks
-      # + margin): cam1 ~1503 -> 1600, cam2 ~821 -> 900. One fixed constant
-      # per camera across basis/train/val/test preserves intensity linearity.
-      # No clip here: basis cam2 (stimulation, ~3300 counts) legitimately maps
-      # above 1; the combinator's clip_output guards final synthetic samples.
+      # Fixed count normalizers from background-subtracted evaluation peak p99.5
+      # plus margin: cam1 1600, cam2 900. Basis values may exceed 1; clipping
+      # is applied after combination.
       - name: "multi_transform"
         params:
           transforms:
@@ -217,12 +210,8 @@ data:
                 current_max: 900.0
   basis_transforms:
     torch:
-      # OPTIONAL sharp-kernel targets: replaces each basis cam2 spot image
-      # (measured sigma ~6.4px) with an energy-preserving Gaussian (sigma 4.0)
-      # at its centroid, so assembled targets are the true distribution, not
-      # distribution*spot (-> removes the measured +7-8% size over-prediction).
-      # Probe-verified: width ratio 1.007, ripple ~ real, 0.26 calibration holds.
-      # Input slot untouched (null). COMMENT OUT THIS BLOCK to revert.
+      # Replace basis target spots with energy-preserving Gaussian kernels at
+      # their centroids. The input slot passes through unchanged.
       - name: "multi_transform"
         params:
           transforms:
@@ -255,12 +244,9 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
-      # Input slot: measured sensor-noise domain randomization. a/b from the
-      # SPATIAL noise gap between real eval cam1 frames and clean synthetic
-      # combos (affine fit, verified per-level match 0.8-1.1x). Temporal
-      # photon-transfer gave a~0.18 (upper bound; binning correlates pixels) -
-      # param_jitter 2.0 spans both. count_scale = the /1600 remap; clip_min 0
-      # replicates bg-subtraction truncation. Target slot: clip only.
+      # Input sensor noise fitted to the spatial noise gap between evaluation
+      # cam1 frames and synthetic combinations. param_jitter spans the temporal
+      # photon-transfer estimate; the target slot is clipped only.
       - name: "multi_transform"
         params:
           transforms:

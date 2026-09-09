@@ -1,4 +1,3 @@
-# pip install xflow-py
 import cv2
 import os
 import random
@@ -14,7 +13,6 @@ from xflow.utils import save_image
 import torch
 
 def main():
-    # Future CLI parameters
     # ========================================
     # Configuration
     # ========================================
@@ -42,8 +40,6 @@ def main():
 
     # ========================================
     # Prepare Dataset 
-    # need to manually resolve all complexity in utils, in here just interface to build final variables needed.
-    # Mainly just change providers, the pipelines are decoupled.
     # ========================================
     dataset_bundle = build_datasets(config)
     train_provider = dataset_bundle["train_provider"]
@@ -88,7 +84,6 @@ def main():
 
     # ========================================
     # Construct Model
-    # also need to resolve all complexity in utils
     # ========================================
     model_bundle = build_model_for_training(config, train_dataset)
     model = model_bundle["model"]
@@ -122,11 +117,11 @@ def main():
     # 1) loss/optimizer
     criterion = torch.nn.MSELoss()  # Pixel wise MSE loss.
 
-    # 2) callbacks (unchanged) + any custom wiring
+    # 2) callbacks and reconstruction datasets
     callbacks = build_callbacks_from_config(
         config=config["callbacks"],
         framework=config["framework"],
-    ) # keep dataset closure for last callback, sequence hardcoded
+    ) # The final callback must accept reconstruction datasets.
     callbacks[-1].set_dataset(test_dataset)
     callbacks[-1].set_training_dataset(train_dataset)
 

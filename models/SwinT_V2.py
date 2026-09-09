@@ -1,18 +1,10 @@
-# Minimal Swin-U-Net (Swin V2-style) for 1x256x256 -> 1x256x256
-# Key V2 bits included:
-#  - Scaled cosine attention (L2-normalized Q,K with learnable tau)
-#  - Continuous relative position bias via tiny MLP on (log-spaced) relative coords
-#  - Window attention + shifted-window attention (cyclic shift + mask)
-#  - Patch Merging (down) and Patch Expand (up) to build a U-Net-like encoder/decoder
+# Swin-style U-Net with scaled cosine attention and continuous position bias.
+# Window and shifted-window attention form an encoder-decoder with skip connections.
 #
-# Notes:
-#  - For simplicity, I use pre-norm inside blocks (classic Transformer style).
-#    Swin V2 introduced residual-post-norm for very large scale models; you can
-#    swap to post-norm if you need exact parity with the paper’s stability trick.
-#  - The CRPB here is a compact “continuous” bias MLP that takes
-#    sign(x)*log(1+|x|) coords and predicts per-head biases.
-#  - Depths and heads are small to keep code readable; scale as needed.
-#  - Input/Output are 1×256×256; change patch_size / depths carefully if you alter sizes.
+# Blocks use pre-normalization, rather than Swin V2's residual post-normalization.
+# The position-bias MLP receives sign(x)*log(1+|x|) relative coordinates.
+# Stage dimensions must be divisible by window_size.
+# Reconstruction upsamples by four, matching patch_size=4.
 
 import math
 from typing import Tuple, Optional, List
@@ -86,7 +78,7 @@ class CRPBias(nn.Module):
 
     def forward(self):
         # rel_coords: (2, N, N) -> (N*N, 2) via stack then mlp then reshape
-        # We'll map each (dy,dx) pair to a bias per head.
+        # Map each (dy, dx) pair to a per-head bias.
         # Efficient path: flatten pairs, run MLP, reshape back.
         two, N, _ = self.rel_coords.shape  # N = win*win
         rel = torch.stack([self.rel_coords[0], self.rel_coords[1]], dim=-1)  # (N, N, 2)

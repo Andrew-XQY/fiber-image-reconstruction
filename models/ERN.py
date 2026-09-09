@@ -1,4 +1,3 @@
-# encoder_regressor.py
 from __future__ import annotations
 import os
 from typing import List, Optional, Union
@@ -50,7 +49,7 @@ class EncoderRegressor(nn.Module):
         self.encoder = nn.Sequential(*blocks)
 
         # ---- Regressor (Flatten -> [512, 256, 4]) ----
-        # Use LazyLinear for the first FC so we don't need img_size.
+        # LazyLinear infers the flattened feature size on the first forward pass.
         mlp = []
         mlp.append(nn.LazyLinear(decoder[0]))  # in_features resolved on first forward
         mlp.append(nn.ReLU(inplace=True))

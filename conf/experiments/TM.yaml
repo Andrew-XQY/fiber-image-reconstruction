@@ -1,6 +1,4 @@
-# ====================
-# Transmission matrix fiber image reconstruction configuration file
-# ====================
+# Transmission-matrix fiber-image reconstruction.
 
 seed: &seed 500     # 42, 168, 500    
 name: &config "TM.yaml"
@@ -66,7 +64,7 @@ data:
       params:
         batch_size: *batch                # Number of images per batch
         shuffle: True                     # Shuffle dataset
-        num_workers: 0                    # Number of worker threads for data loading
+        num_workers: 0                    # Number of data-loader worker processes.
         prefetch_factor: 2                # Number of batches to prefetch
         seed: *seed                       # Random seed for reproducibility
 

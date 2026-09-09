@@ -1,4 +1,4 @@
-# conf/machine/mac.yaml
+# macOS dataset paths.
 paths:
   datasets:
     mmf: "/Users/andrewxu/Documents/DataHub/datasets/"

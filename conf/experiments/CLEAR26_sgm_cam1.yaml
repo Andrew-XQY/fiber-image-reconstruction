@@ -1,26 +1,15 @@
-# ====================
-# CLEAR 2026 camera-pair reconstruction - cam1 -> cam2, PURE SGM label space
-# Derived from CLEAR26_sgm_cam3.yaml. Keeps the pure-SGM label space, model,
-# training, dataset, and HPC settings unchanged; only the input camera and
-# cam1-dependent calibration values differ. Cam1 values are taken from the
-# measured CLEAR26_sgm (cam1) config: input normalizer 1600, input basis
-# scale 0.26, sensor noise a=0.106, b=2.81, count_scale=1600.
-# Run with: EXPERIMENT_CONFIG=CLEAR26_sgm_cam1
-# ====================
+# CLEAR 2026 reconstruction: cam1 input, cam2 target.
+# SGM coefficient maps combine a measured stimulation basis.
+# The real-pattern stream is disabled. Prior and camera calibration
+# use measured evaluation-target statistics.
 
 seed: &seed 42
 name: &config "CLEAR26_sgm_cam1.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Train on camera-separated CLEAR 2026 processed data, cam1 fiber -> cam2
-  screen. SQL matches camera pairs by sample_id/run_id and emits
-  "input_path|target_path". Training uses the matched pairs as a cached basis
-  for SpatialNearestCombinator; evaluation is loaded from its own SQL key.
-  PURE SGM with distribution-matched priors (intensity_range /
-  center_radius_range / aspect_range + rendered-target validator); no
-  real-beam patterns anywhere in training -> leak-free. Dropout off,
-  combinator intensity_scale jitter on.
+  Reconstruct cam1 fiber images as cam2 screen images using SGM coefficient maps over a measured stimulation basis.
+  The real-pattern stream is disabled; the prior and calibration use measured evaluation statistics.
 
 paths:
   output: ${paths.output_root}
@@ -38,9 +27,7 @@ model:
   encoder:          [64,   128, 128, 256, 512, 1024]
   decoder:          [1024, 512, 256, 128, 128, 64  ]
   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-  # Dropout removed: training pairs are generated on-the-fly (effectively
-  # infinite, non-repeating), so dropout adds blur without a regularization
-  # benefit. Revert to [1,1,0,0,0,0] to reproduce older runs.
+
   apply_dropout:    [0,    0,   0,   0,   0,   0   ]
   final_activation: sigmoid
 
@@ -119,30 +106,22 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  # PURE-SGM prior, distribution-matched to measured real-beam marginals
-  # (218 eval targets): sigma_x/y 0.082/0.083 rel [p5-p95 0.067-0.106/0.128],
-  # centroid radius mean 0.236 (p95 0.369), peak 0.558 [0.278, 0.742],
-  # footprint(>0.05) 0.117. Monte-Carlo of this sampler reproduces all five
-  # marginals within a few percent (sx 0.083, r 0.258, peak 0.52, fp 0.119,
-  # empties 0%). Old prior failure modes fixed: peaks were ~14x too faint
-  # (median 0.043), 17-26% near-empty targets, 75% of centers beyond r=0.25
-  # (real: 27%), 45% of footprints larger than any real beam.
-  # Requires the xflow pattern_gen patch (intensity_range,
-  # center_radius_range, aspect_range); each key None/absent -> legacy path.
+  # SGM prior fitted to measured evaluation-target marginals: width,
+  # centroid radius, peak intensity, and footprint. Explicit intensity,
+  # radius, and aspect ranges replace the fallback sampler settings.
   total_Guassian_num: 1
   max_pixel_value: 1.0
   max_intensity: 0.02        # ignored while intensity_range is set (fallback)
-  area_boost_scale: 0.0      # boost still applies on top of intensity_range -> keep 0
+  area_boost_scale: 0.0      # Disable the additional amplitude boost.
   max_peak_intensity: null
   minimum_pixel_threshold: 0.02
   fade_rate: 0.02            # ignored while intensity_range is set (fallback)
   std_1: 0.06
   std_2: 0.11
   distribution: "other"
-  # CALIBRATION: the combinator has ~4.5x pattern->rendered amplitude gain
-  # (real patterns enter at peak ~0.12 [raw/4095] and render to ~0.55).
-  # SGM pattern amplitude must therefore match the REAL PATTERN scale (~0.12),
-  # not the rendered-target scale. [0.30, 0.75] saturated targets at clip=1.0.
+  # Coefficient amplitudes were calibrated before rendering, whose measured
+  # amplitude gain was about 4.5. The earlier [0.30, 0.75] coefficient range
+  # saturated rendered targets at clip=1.
   intensity_range: [0.07, 0.16]
   center_radius_range: [0.0, 0.39]
   aspect_range: [0.7, 1.55]
@@ -153,13 +132,11 @@ simulation:
         interpolation: "area"
     - name: "shrink_to_canvas"
       params:
-        scale: 1.0    # was 0.95; real patterns use 1.0 -> keep spaces consistent
+        scale: 1.0    # Full canvas scale.
         fill: 0.0
         interpolation: "area"
 
-# Optional rejection sampling on rendered targets (utils.py wiring).
-# DISABLED: priors above are matched by construction; verify epoch_1 images /
-# smoke_test.py instead of filtering at runtime. Keep as a debug tool only.
+# Optional rendered-target rejection sampling; disabled in this configuration.
 sgm_validator:
   enabled: false
   peak_range: [0.20, 0.90]
@@ -210,9 +187,8 @@ data:
           transforms:
             - name: "add_parent_dir"
             - name: "add_parent_dir"
-      # load_image16: PIL-based deterministic 16-bit decode, (1,H,W) int counts;
-      # raises on a silent 8-bit source. Replaces torchvision read_image, whose
-      # 16-bit PNG behavior is version-dependent.
+      # load_image16 returns 16-bit integer counts with shape (1, H, W)
+      # and rejects 8-bit source images.
       - name: "multi_transform"
         params:
           transforms:
@@ -236,11 +212,9 @@ data:
                 background_source: ${paths.processed_405_background}
                 camera: "cam2"
                 clip_min: 0.0
-      # Data-driven normalization (p99.5 of background-subtracted eval peaks
-      # + margin): cam1 ~1503 -> 1600, cam2 ~821 -> 900. One fixed constant
-      # per camera across basis/train/val/test preserves intensity linearity.
-      # No clip here: basis cam2 (stimulation, ~3300 counts) legitimately maps
-      # above 1; the combinator's clip_output guards final synthetic samples.
+      # Fixed count normalizers from background-subtracted evaluation peak p99.5
+      # plus margin: cam1 1600, cam2 900. Basis values may exceed 1; clipping
+      # is applied after combination.
       - name: "multi_transform"
         params:
           transforms:
@@ -254,12 +228,8 @@ data:
                 current_max: 900.0
   basis_transforms:
     torch:
-      # OPTIONAL sharp-kernel targets: replaces each basis cam2 spot image
-      # (measured sigma ~6.4px) with an energy-preserving Gaussian (sigma 4.0)
-      # at its centroid, so assembled targets are the true distribution, not
-      # distribution*spot (-> removes the measured +7-8% size over-prediction).
-      # Probe-verified: width ratio 1.007, ripple ~ real, 0.26 calibration holds.
-      # Input slot untouched (null). COMMENT OUT THIS BLOCK to revert.
+      # Replace basis target spots with energy-preserving Gaussian kernels at
+      # their centroids. The input slot passes through unchanged.
       - name: "multi_transform"
         params:
           transforms:
@@ -267,8 +237,7 @@ data:
             - name: "torch_render_centroid_kernel"
               params:
                 sigma: 4.0
-      # Scale calibration: input (cam1) 0.26 = measured cam1 calibration from
-      # CLEAR26_sgm; target (cam2) keeps the existing 0.26 calibration.
+      # Input and target scale factors use the measured cam1/cam2 calibration.
       - name: "multi_transform"
         params:
           transforms:
@@ -294,10 +263,9 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
-      # Input slot: measured cam1 sensor-noise domain randomization (spatial
-      # noise-gap fit): a=0.106, b=2.81, count_scale=1600 (the /1600 remap);
-      # param_jitter 2.0 spans the temporal photon-transfer upper bound.
-      # Target slot: clip only.
+      # Input noise uses the measured cam1 spatial noise-gap fit:
+      # a=0.106, b=2.81, count_scale=1600. param_jitter spans the temporal
+      # photon-transfer estimate; the target slot is clipped only.
       - name: "multi_transform"
         params:
           transforms:

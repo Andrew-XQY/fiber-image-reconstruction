@@ -435,8 +435,7 @@ def build_datasets(config: dict) -> dict:
         ]
         canvas.set_threshold(simulation_cfg["minimum_pixel_threshold"])
 
-        # Optional config-driven priors; None -> legacy hardcoded behavior.
-        # Requires xflow >= the pattern_gen patch adding these kwargs.
+        # Optional configured priors; None uses the pattern generator defaults.
         def _as_range(key):
             v = simulation_cfg.get(key)
             return tuple(v) if v is not None else None
@@ -588,7 +587,7 @@ def build_datasets(config: dict) -> dict:
     test_dataset = eval_bundle["test_dataset"]
 
     # ====================================
-    # Legacy case templates kept for future reuse.
+    # Inactive pipeline examples.
     # ====================================
 
     # ====================================
@@ -799,7 +798,7 @@ def build_model_for_training(config: dict, train_dataset) -> dict:
         model = model.to(device)
         criterion = ReconLoss(w_l1=config['training']['w_l1'], w_ssim=config['training']['w_ssim']) # Loss: L1 + 0.3*SSIM
 
-        # Optimizer: AdamW with recommended params
+        # AdamW with a batch-size-dependent learning rate.
         base_lr = 4e-4 if config['training']['batch_size'] >= 64 else 2e-4
         optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -835,7 +834,7 @@ def build_model_for_training(config: dict, train_dataset) -> dict:
 
 def metric_debug(extract_fn):
     def metric(pred, target):
-        # --- DEBUG: force a constant output ---
+        # Constant diagnostic metric.
         return {"val_debug_mae": 0.0, "val_debug_rmse": 0.0}
     return metric
 
@@ -916,7 +915,7 @@ def make_param_metric(keys=("h_centroid","v_centroid","h_width","v_width")):
         for k, d in zip(keys, diffs):
             out[f"val_{k}_mae"]  = abs(d)
             out[f"val_{k}_mse"]  = d*d
-            out[f"val_{k}_rmse"] = abs(d)**0.5 if d >= 0 else (d*d)**0.5  # same as sqrt(mse)
+            out[f"val_{k}_rmse"] = abs(d)**0.5 if d >= 0 else (d*d)**0.5
 
         # simple overall
         overall_mae = sum(abs(d) for d in diffs) / len(diffs)
@@ -955,7 +954,7 @@ def save_tensor_image_and_exit(tensor: torch.Tensor, path: str = "results/debug.
     print(f"[DEBUG] input batch shape={tuple(x.shape)}, dtype={x.dtype}")
     print(f"[DEBUG] x0 stats: min={x0.min().item():.6g}, max={x0.max().item():.6g}, mean={x0.mean().item():.6g}")
 
-    # Visualize without hiding scale errors; fall back to min-max if needed
+    # Scale the preview to its observed range.
     img = x0
     if img.dim() == 3 and img.size(0) in (1, 3):
         img_to_save = img.clone()

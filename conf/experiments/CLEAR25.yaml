@@ -1,6 +1,4 @@
-# ====================
-# Conv AutoEncoder fiber image reconstruction configuration file
-# ====================
+# Convolutional autoencoder for CLEAR 2025 fiber-image reconstruction.
 
 seed: &seed 42                                  # 42, 168, 500
 name: &config "CLEAR25.yaml"
@@ -610,7 +608,7 @@ data:
       params:
         batch_size: *batch                      # Number of images per batch
         shuffle: True                           # Shuffle dataset
-        num_workers: 0                          # Number of worker threads for data loading
+        num_workers: 0                          # Number of data-loader worker processes.
         prefetch_factor: 2                      # Number of batches to prefetch
         seed: *seed                             # Random seed for reproducibility
 
@@ -651,7 +649,7 @@ data:
 #       params:
 #         batch_size: *batch                # Number of images per batch
 #         shuffle: True                     # Shuffle dataset
-#         num_workers: 0                    # Number of worker threads for data loading
+#         num_workers: 0                    # Number of data-loader worker processes.
 #         prefetch_factor: 2                # Number of batches to prefetch
 #         seed: *seed                       # Random seed for reproducibility
 

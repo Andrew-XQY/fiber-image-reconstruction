@@ -1,8 +1,4 @@
-"""
-Clean Transmission Matrix Module - Minimal Implementation
-
-A simple linear transmission matrix for image-to-image mapping.
-"""
+"""Linear transmission matrix for image-to-image mapping."""
 
 import torch
 import torch.nn as nn
@@ -12,10 +8,7 @@ import os
 
 
 class TransmissionMatrix(nn.Module):
-    """
-    Simple transmission matrix for image-to-image mapping.
-    Just a linear layer that maps input images to output images.
-    """
+    """Map flattened input images through a learned linear matrix."""
     
     def __init__(
         self,
