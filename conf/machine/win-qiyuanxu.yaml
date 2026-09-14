@@ -19,3 +19,25 @@ paths:
     processed_yag_laser: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Yag_Laser"
     
     processed_chromox_cropped: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR25_Chromox_Cropped"
+
+    # CLEAR26 processed datasets (Documents/DataHub/processed/CLEAR26/<day>/...).
+    processed_405_background_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Friday/405_background_256"
+    processed_405_realbeam_random_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Friday/405_realbeam_random_256"
+    processed_405_realbeam_raster_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Friday/405_realbeam_raster_256"
+    processed_405_stimuation_large_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Friday/405_stimuation_large_256"
+    processed_405_realbeam_eval_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Friday/405_realbeam_eval_256"
+
+    processed_690_background_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Thursday/690_background_256"
+    processed_690_reflection_large_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Thursday/690_reflection_large_256"
+    processed_690_realbeam_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Thursday/690_realbeam_256"
+
+    processed_670_background_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Wednesday/670_background_256"
+    processed_670_large_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Wednesday/670_large_256"
+    processed_670_realbeam_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Wednesday/670_realbeam_256"
+
+    processed_520_background_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Wednesday/520_background_256"
+    processed_520_stimulation_large_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Wednesday/520_stimulation_large_256"
+    processed_520_realbeam_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Wednesday/520_realbeam_256"
+
+    processed_520_background_friday_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Friday/520_background_256"
+    processed_520_stimulation_small_256: "C:/Users/qiyuanxu/Documents/DataHub/processed/CLEAR26/Friday/520_stimulation_small_256"

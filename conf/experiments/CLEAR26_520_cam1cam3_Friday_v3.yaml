@@ -1,0 +1,384 @@
+# CLEAR 2026, 520 nm: cam1 + cam3 (both fibres) as a 2-channel input, cam2 target;
+# per-sample L2 normalization applied per fibre slot before packing.
+# Per-camera calibration taken unchanged from CLEAR26_520_cam1_Friday_v3.yaml
+# (cam1, cam2; 2026-08-11) and CLEAR26_520_cam3_v3.yaml (cam3; 2026-08-07).
+# Basis: Friday 520_stimulation_small_256 triplets (both fibres within 1 ms of
+# the cam2 frame): 3182 eligible at ROI>=0.75, capped at 3000 with seed 42.
+# Evaluation: shared Friday 405_realbeam_eval_256, ROI>=0.80 (436 triplets).
+# All evaluation targets feed the real-pattern stream; real/SGM weights are 60/40.
+# Slot order is cam1 | cam2 | cam3 so the target stays slot 1 (centroid positions,
+# image_generator); torch_cat_slots packs slots 0 and 2 into the model input.
+
+seed: &seed 42
+name: &config "CLEAR26_520_cam1cam3_Friday_v3.yaml"
+framework: "pytorch"
+file_extract: False
+note: |
+  Reconstruct cam2 screen images from both fibres: cam1 and cam3 images stacked as two input channels.
+  Training combines the three-camera basis with 60% real-target coefficient maps from the unsplit evaluation database and 40% SGM maps.
+
+paths:
+  output: ${paths.output_root}
+  processed_520_background: ${paths.datasets.processed_520_background_friday_256}
+  processed_520_stimulation_small: ${paths.datasets.processed_520_stimulation_small_256}
+  processed_405_realbeam_eval_256: ${paths.datasets.processed_405_realbeam_eval_256}
+
+model:
+  name: "CAE"
+  in_channels: 2
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,   128, 128, 256, 512, 1024]
+  decoder:          [1024, 512, 256, 128, 128, 64  ]
+  apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
+
+  apply_dropout:    [0,    0,   0,   0,   0,   0   ]
+  final_activation: sigmoid
+
+sql:
+  # Triplets: cam1 (a) | cam2 (b) | cam3 (c), both fibres within 1 ms of the target frame.
+  clear26_520_cam1cam3_to_cam2_basis: |
+    SELECT
+      a.png_path || '|' || b.png_path || '|' || c.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    JOIN images c
+      ON a.sample_id = c.sample_id
+     AND a.run_id = c.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND c.camera = 'cam3'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND c.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
+      AND c.stat_max > 0
+      AND c.stat_sum > 0
+      AND b.roi_energy_fraction >= 0.75
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+      AND abs(c.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.run_id, a.sample_id;
+
+  clear26_520_cam1cam3_to_cam2_eval: |
+    SELECT
+      a.png_path || '|' || b.png_path || '|' || c.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    JOIN images c
+      ON a.sample_id = c.sample_id
+     AND a.run_id = c.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND c.camera = 'cam3'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND c.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
+      AND c.stat_max > 0
+      AND c.stat_sum > 0
+      AND b.roi_energy_fraction >= 0.80
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+      AND abs(c.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.run_id, a.sample_id;
+
+simulation:
+  canvas_size: [256, 256]
+  # Concentric core/halo components model the near-round cam2 targets.
+  total_Guassian_num: 2
+  max_pixel_value: 1.0
+  max_intensity: 0.10   # Legacy fallback; intensity_range is active below.
+  area_boost_scale: 0.0
+  max_peak_intensity: null
+  minimum_pixel_threshold: 0.0
+  fade_rate: 0.10
+  std_1: 0.045
+  std_2: 0.055
+  distribution: "other"
+  intensity_range: [0.060, 0.100]
+  aspect_range: [1.0, 1.20]
+  # Orientation range fitted to the measured target distribution.
+  orientation_range: [-55.0, 40.0]
+  # Radius range fitted to the evaluation-target position distribution.
+  center_radius_range: [0.0, 0.430]
+  shared_center: true
+  component_params:
+    - {}
+    - std_1: 0.090
+      std_2: 0.150
+      aspect_range: [1.0, 1.20]
+      intensity_range: [0.0060, 0.0120]
+      area_boost_scale: 0.0
+  process_functions:
+    - name: "resize"
+      params:
+        size: [34, 34]
+        interpolation: "area"
+    - name: "shrink_to_canvas"
+      params:
+        scale: 0.95
+        fill: 0.0
+        interpolation: "area"
+
+# No rejection validator is enabled. Coefficient intensities are strictly positive.
+
+training:
+
+  epochs: &epochs 250
+  learning_rate: 1.0e-4
+  batch_size: &batch 32
+
+callbacks:
+  - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
+  - name: "torch_early_stopping"
+    params:
+      monitor: "val_loss"
+      patience: 20
+  - name: "torch_image_reconstruction_callback"
+    params:
+      save_dir: ${paths.output}
+      include_training_images: True
+
+dataset_structure:
+  db: "dataset.db"
+
+data:
+  pipeline_case: spatial_nearest_combinator
+  dataset_sources: ["processed_520_stimulation_small", "processed_405_realbeam_eval_256"]
+  train_sql_key: clear26_520_cam1cam3_to_cam2_basis
+  eval_sql_key: clear26_520_cam1cam3_to_cam2_eval
+  # All evaluation-query targets feed the real-pattern stream without splitting.
+  pattern_sql_key: clear26_520_cam1cam3_to_cam2_eval
+  # Seeded random sampling is applied before the eager basis cache is built.
+  max_basis_samples: 3000
+  provider_output_column: image_pair
+  total_train_samples: 5000
+  val_test_split: 0.5
+  input_shape: &inp [256, 256]
+  output_shape: &out [256, 256]
+  # Every slot list below is (cam1, cam2, cam3).
+  transforms:
+    torch:
+      - name: "split_text"
+        params:
+          separator: "|"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "add_parent_dir"
+            - name: "add_parent_dir"
+            - name: "add_parent_dir"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "load_image16"
+            - name: "load_image16"
+            - name: "load_image16"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_to_tensor"
+            - name: "torch_to_tensor"
+            - name: "torch_to_tensor"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_520_background}
+                camera: "cam1"
+                clip_min: 0.0
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_520_background}
+                camera: "cam2"
+                clip_min: 0.0
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.processed_520_background}
+                camera: "cam3"
+                clip_min: 0.0
+      # Count normalizers calibrated on evaluation images (cam1/cam2 2026-08-11,
+      # cam3 2026-08-07). This chain also builds the basis cache: preserve
+      # calibrated count units here. Per-sample normalization follows
+      # combination for training and is applied separately in
+      # eval_extra_transforms for evaluation.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 1600.0
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 900.0
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: 2100.0
+  # Evaluation-only normalization mirrors the generated training samples:
+  # per-slot L2, per-slot post-L2 scale, then pack the two fibre slots.
+  eval_extra_transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_l2_normalize"
+            - name: "torch_l2_normalize"
+            - name: "torch_l2_normalize"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 24.0
+            - name: "torch_scale"
+              params:
+                scale_factor: 16.0
+            - name: "torch_scale"
+              params:
+                scale_factor: 24.0
+      - name: "torch_cat_slots"
+        params:
+          slots: [0, 2]
+  basis_transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - null
+            - name: "torch_render_centroid_kernel"
+              params:
+                sigma: 8.0
+            - null
+      # Basis scales fitted to pre-L2 evaluation energies
+      # (cam1 0.966 / cam2 0.871 on 2026-08-11; cam3 0.946 on 2026-08-07).
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.966
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.871
+            - name: "torch_scale"
+              params:
+                scale_factor: 0.946
+  dataset_ops:
+    - name: "torch_batch"
+      params:
+        batch_size: *batch
+        shuffle: True
+        num_workers: 0
+        prefetch_factor: 2
+        seed: *seed
+
+combinator:
+  jitter_mode: global_cell
+  jitter_alpha: 1.0
+  generation_batch_size: *batch
+  clip_output: [0.0, 1.0]
+  transforms:
+    torch:
+      # Apply per-fibre sensor noise in count units before per-sample normalization.
+      - name: "multi_transform"
+        params:
+          transforms:
+            # Sensor-noise fit: all 438 cam1 evaluation frames, 2026-08-11.
+            # param_jitter applies factor-two parameter randomization.
+            - name: "torch_sensor_noise"
+              params:
+                a: 0.214
+                b: 2.17
+                count_scale: 1600.0
+                param_jitter: 2.0
+                gain: null
+                clip_min: 0.0
+            - null
+            # Sensor-noise fit: all 437 cam3 evaluation frames, 2026-08-07.
+            - name: "torch_sensor_noise"
+              params:
+                a: 0.333
+                b: 1.42
+                count_scale: 2100.0
+                param_jitter: 2.0
+                gain: null
+                clip_min: 0.0
+      # The fibre slots are torch tensors after sensor-noise injection; the
+      # target is a NumPy array. Use the matching L2 transform for each slot.
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_l2_normalize"
+            - name: "l2_normalize"
+            - name: "torch_l2_normalize"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: 24.0
+            - name: "torch_scale"
+              params:
+                scale_factor: 16.0
+            - name: "torch_scale"
+              params:
+                scale_factor: 24.0
+      # Pack the two fibre slots into one (2, H, W) input; the target follows.
+      - name: "torch_cat_slots"
+        params:
+          slots: [0, 2]
+
+image_generator:
+  cache_transformed: true
+  transforms:
+    - name: "split_text"
+      params:
+        separator: "|"
+    - name: "tuple_select"
+      params:
+        index: 1
+    - name: "add_parent_dir"
+    - name: "load_image"
+    - name: "to_narray"
+    - name: "to_grayscale"
+    - name: "subtract_background"
+      params:
+        background_source: ${paths.processed_520_background}
+        camera: "cam2"
+        clip_min: 0.0
+    - name: "resize"
+      params:
+        size: [34, 34]
+        interpolation: "area"
+    - name: "remap_range"
+      params:
+        current_min: 0.0
+        current_max: 4095.0
+        target_min: 0.0
+        target_max: 1.0
+    - name: "shrink_to_canvas"
+      params:
+        scale: 1.0
+        fill: 0.0
+        interpolation: "bilinear"
+
+weighted_stream:
+  real_weight: 0.6
+  sgm_weight: 0.4
+
+extra_files: ["models/CAE.py"]

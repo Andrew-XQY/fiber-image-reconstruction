@@ -101,7 +101,7 @@ def main():
     model_device = next(model.parameters()).device
     report = build_model_report(
         model,
-        lambda: model(torch.randn(1, 1, *config["data"]["input_shape"], device=model_device))
+        lambda: model(torch.randn(1, config["model"].get("in_channels", 1), *config["data"]["input_shape"], device=model_device))
     )
     with open(f"{config['paths']['output']}/model_report.txt", "w", encoding="utf-8") as f:
         f.write(report)
