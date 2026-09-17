@@ -6,7 +6,7 @@ This project compares models for reconstructing beam images from multimode-fiber
 
 ## Minimal example
 
-This example uses `CLEAR26_sgm_cam3.yaml`: cam3 is the fiber input, cam2 is the beam target, and the model is a convolutional autoencoder (CAE).
+This example uses `CLEAR26_405_cam3_sgm.yaml`: cam3 is the fiber input, cam2 is the beam target, and the model is a convolutional autoencoder (CAE).
 
 Use a Python 3.12 environment. Clone both repositories into the same folder and install:
 
@@ -36,7 +36,7 @@ Save this as `run_example.py` in the repository root. It selects the machine pro
 import os
 
 os.environ["MACHINE"] = "local"
-os.environ["EXPERIMENT_CONFIG"] = "CLEAR26_sgm_cam3"
+os.environ["EXPERIMENT_CONFIG"] = "CLEAR26_405_cam3_sgm"
 
 from train import main
 
@@ -57,7 +57,7 @@ For this config, Gaussian patterns combine the measured basis into synthetic tra
 
 ```mermaid
 flowchart TD
-    A["local.yaml and CLEAR26_sgm_cam3.yaml"] --> B["Data providers: measured basis and backgrounds"]
+    A["local.yaml and CLEAR26_405_cam3_sgm.yaml"] --> B["Data providers: measured basis and backgrounds"]
     A --> E["Real camera pairs for validation"]
     B --> C["XFlow pipeline: Gaussian patterns into training pairs"]
     C --> D["CAE model and XFlow trainer"]

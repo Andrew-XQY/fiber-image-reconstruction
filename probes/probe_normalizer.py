@@ -11,7 +11,7 @@ cam1 -> 1600. One fixed constant per camera across basis/train/val/test
 preserves intensity linearity; do NOT use per-image min-max.
 
 Run from repo root:
-  python -m probes.probe_normalizer --config CLEAR26_sgm_cam3
+  python -m probes.probe_normalizer --config CLEAR26_405_cam3_sgm
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def suggest(p995: float, margin: float, step: int) -> int:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", default="CLEAR26_sgm_cam3")
+    ap.add_argument("--config", default="CLEAR26_405_cam3_sgm")
     ap.add_argument("--sql", default=None, help="SQL key (default: eval_sql_key)")
     ap.add_argument("--limit", type=int, default=None, help="max pairs")
     ap.add_argument("--margin", type=float, default=1.07)

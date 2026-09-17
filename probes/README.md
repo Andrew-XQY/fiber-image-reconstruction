@@ -5,10 +5,10 @@ Run them from the repository root after configuring `MACHINE` and the datasets
 as described in the [README](../README.md).
 
 ```bash
-python -m probes.probe_normalizer   --config CLEAR26_sgm_cam3
-python -m probes.probe_sensor_noise --config CLEAR26_sgm_cam3
-python -m probes.probe_basis_scale  --config CLEAR26_sgm_cam3 --batches 8
-python -m probes.probe_sgm_prior    --config CLEAR26_sgm_cam3 --synth
+python -m probes.probe_normalizer   --config CLEAR26_405_cam3_sgm
+python -m probes.probe_sensor_noise --config CLEAR26_405_cam3_sgm
+python -m probes.probe_basis_scale  --config CLEAR26_405_cam3_sgm --batches 8
+python -m probes.probe_sgm_prior    --config CLEAR26_405_cam3_sgm --synth
 ```
 
 Use this order: normalization, noise, basis scale, then beam priors. Later

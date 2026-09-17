@@ -1,15 +1,15 @@
-# CLEAR 2026 reconstruction: cam3 input, cam2 target.
+# CLEAR 2026 reconstruction: cam1 input, cam2 target.
 # SGM coefficient maps combine a measured stimulation basis.
-# Input background offsets and sensor gain are randomized.
-# Prior and camera calibration use measured evaluation statistics.
+# The real-pattern stream is disabled. Prior and camera calibration
+# use measured evaluation-target statistics.
 
 seed: &seed 42
-name: &config "CLEAR26_sgm_cam3_drplus.yaml"
+name: &config "CLEAR26_405_cam1_sgm.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Reconstruct cam3 fiber images as cam2 screen images using SGM coefficient maps over a measured stimulation basis.
-  Input offsets and sensor gain are randomized; the prior and calibration use measured evaluation statistics.
+  Reconstruct cam1 fiber images as cam2 screen images using SGM coefficient maps over a measured stimulation basis.
+  The real-pattern stream is disabled; the prior and calibration use measured evaluation statistics.
 
 paths:
   output: ${paths.output_root}
@@ -169,9 +169,9 @@ dataset_structure:
 data:
   pipeline_case: spatial_nearest_combinator
   dataset_sources: ["processed_405_stimuation_large", "processed_405_realbeam_eval_256"]
-  train_sql_key: clear26_cam3_to_cam2_basis
-  eval_sql_key: clear26_cam3_to_cam2_eval
-  pattern_sql_key: clear26_cam3_to_cam2_basis
+  train_sql_key: clear26_cam1_to_cam2_basis
+  eval_sql_key: clear26_cam1_to_cam2_eval
+  pattern_sql_key: clear26_cam1_to_cam2_basis
   provider_output_column: image_pair
   total_train_samples: 5000
   val_test_split: 0.5
@@ -205,7 +205,7 @@ data:
             - name: "torch_subtract_background"
               params:
                 background_source: ${paths.processed_405_background}
-                camera: "cam3"
+                camera: "cam1"
                 clip_min: 0.0
             - name: "torch_subtract_background"
               params:
@@ -213,7 +213,7 @@ data:
                 camera: "cam2"
                 clip_min: 0.0
       # Fixed count normalizers from background-subtracted evaluation peak p99.5
-      # plus margin: cam3 2100, cam2 900. Basis values may exceed 1; clipping
+      # plus margin: cam1 1600, cam2 900. Basis values may exceed 1; clipping
       # is applied after combination.
       - name: "multi_transform"
         params:
@@ -221,7 +221,7 @@ data:
             - name: "torch_remap_range"
               params:
                 current_min: 0.0
-                current_max: 2100.0
+                current_max: 1600.0
             - name: "torch_remap_range"
               params:
                 current_min: 0.0
@@ -237,14 +237,13 @@ data:
             - name: "torch_render_centroid_kernel"
               params:
                 sigma: 4.0
-      # Input scale 0.28 comes from the measured synthetic/evaluation energy
-      # ratio of 3.58; target scale is 0.26.
+      # Input and target scale factors use the measured cam1/cam2 calibration.
       - name: "multi_transform"
         params:
           transforms:
             - name: "torch_scale"
               params:
-                scale_factor: 0.28
+                scale_factor: 0.26
             - name: "torch_scale"
               params:
                 scale_factor: 0.26
@@ -264,30 +263,19 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
-      # Input noise uses the measured cam3 spatial noise-gap fit.
-      # The input offset U(0, 0.03) covers the evaluation background pedestal
-      # measured at 0.019 normalized units (about 40 counts at scale 2100).
-      # The target slot is clipped only.
-      - name: "multi_transform"
-        params:
-          transforms:
-            - name: "torch_random_offset"
-              params:
-                low: 0.0
-                high: 0.03
-            - null
+      # Input noise uses the measured cam1 spatial noise-gap fit:
+      # a=0.106, b=2.81, count_scale=1600. param_jitter spans the temporal
+      # photon-transfer estimate; the target slot is clipped only.
       - name: "multi_transform"
         params:
           transforms:
             - name: "torch_sensor_noise"
               params:
-                a: 0.118
-                b: 4.82
-                count_scale: 2100.0
+                a: 0.106
+                b: 2.81
+                count_scale: 1600.0
                 param_jitter: 2.0
-                # Randomize input gain to model illumination drift between basis and
-                # evaluation acquisitions.
-                gain: [0.85, 1.15]
+                gain: null
                 clip_min: 0.0
             - name: "torch_clip_range"
               params:

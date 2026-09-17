@@ -19,7 +19,7 @@ never modified.
 Feeds: data.basis_transforms -> torch_scale.scale_factor (input and target)
 
 Run from repo root (needs the datasets + xflow; slow on first basis cache):
-  python -m probes.probe_basis_scale --config CLEAR26_sgm_cam3 --batches 8
+  python -m probes.probe_basis_scale --config CLEAR26_405_cam3_sgm --batches 8
 """
 from __future__ import annotations
 
@@ -192,7 +192,7 @@ def _clip_summary(stats):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", default="CLEAR26_sgm_cam3")
+    ap.add_argument("--config", default="CLEAR26_405_cam3_sgm")
     ap.add_argument("--batches", type=int, default=8, help="batches per stream")
     args = ap.parse_args()
     if args.batches < 1:
