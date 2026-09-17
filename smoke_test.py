@@ -1,7 +1,7 @@
 """Check generated beam targets and data throughput before training.
 
 Run from the repository root with the datasets and XFlow installed:
-    EXPERIMENT_CONFIG=CLEAR26_sgm_cam3 python smoke_test.py
+    EXPERIMENT_CONFIG=CLEAR26_405_cam3_sgm python smoke_test.py
 
 Reports dataset construction time, target marginals against the reference
 bands, and generation throughput. Saves input/target previews to
@@ -13,7 +13,7 @@ from config_utils import load_config, detect_machine
 from utils import build_datasets
 from xflow import ConfigManager
 
-name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_sgm_cam3")
+name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_405_cam3_sgm")
 config = ConfigManager(
     load_config(f"{name}.yaml", experiment_name=f"{name}-smoke",
                 machine=detect_machine(), resolve=True)

@@ -24,7 +24,7 @@ from xflow.data import build_transforms_from_config  # noqa: E402
 # ---------------------------------------------------------------- config
 
 def load_experiment(name: str) -> dict:
-    """Resolved experiment config, e.g. load_experiment("CLEAR26_sgm_cam3")."""
+    """Resolved experiment config, e.g. load_experiment("CLEAR26_405_cam3_sgm")."""
     return ConfigManager(
         load_config(f"{name}.yaml", machine=detect_machine(), resolve=True)
     ).get()

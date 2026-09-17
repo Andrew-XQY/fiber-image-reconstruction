@@ -4,7 +4,7 @@
 # Prior and camera calibration use measured evaluation statistics.
 
 seed: &seed 42
-name: &config "CLEAR26_sgm_cam3_nonoise.yaml"
+name: &config "CLEAR26_405_cam3_sgm_nonoise.yaml"
 framework: "pytorch"
 file_extract: False
 note: |

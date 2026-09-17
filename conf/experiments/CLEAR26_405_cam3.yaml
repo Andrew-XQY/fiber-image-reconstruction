@@ -1,15 +1,16 @@
-# CLEAR 2026 reconstruction: cam1 input, cam2 target.
-# SGM coefficient maps combine a measured stimulation basis.
-# The real-pattern stream is disabled; SGM parameters were tuned to
-# measured evaluation-target statistics.
+# CLEAR 2026 reconstruction: cam3 input, cam2 target.
+# Measured stimulation basis with a 70/30 real-pattern/SGM mixture.
+# Real coefficient maps come from the unsplit evaluation database.
+# Cam3 calibration recorded on 2026-07-06 using evaluation peaks,
+# synthetic/evaluation energy ratios, and a spatial noise-gap fit.
 
 seed: &seed 42
-name: &config "CLEAR26_sgm.yaml"
+name: &config "CLEAR26_405_cam3.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Reconstruct cam1 fiber images as cam2 screen images using SGM coefficient maps over a measured stimulation basis.
-  The real-pattern stream is disabled; the prior and calibration use measured evaluation statistics.
+  Reconstruct cam3 fiber images as cam2 screen images using a measured stimulation basis.
+  Training combines the basis with 70% real-target coefficient maps from the unsplit evaluation database and 30% SGM maps.
 
 paths:
   output: ${paths.output_root}
@@ -31,40 +32,6 @@ model:
   final_activation: sigmoid
 
 sql:
-  clear26_cam1_to_cam2_basis: |
-    SELECT
-      a.png_path || '|' || b.png_path AS image_pair,
-      a.sample_id,
-      a.run_id
-    FROM images a
-    JOIN images b
-      ON a.sample_id = b.sample_id
-     AND a.run_id = b.run_id
-    WHERE a.camera = 'cam1'
-      AND b.camera = 'cam2'
-      AND a.png_path IS NOT NULL
-      AND b.png_path IS NOT NULL
-      AND b.roi_energy_fraction >= 0.75
-      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
-    ORDER BY a.sample_id;
-
-  clear26_cam1_to_cam2_eval: |
-    SELECT
-      a.png_path || '|' || b.png_path AS image_pair,
-      a.sample_id,
-      a.run_id
-    FROM images a
-    JOIN images b
-      ON a.sample_id = b.sample_id
-     AND a.run_id = b.run_id
-    WHERE a.camera = 'cam1'
-      AND b.camera = 'cam2'
-      AND a.png_path IS NOT NULL
-      AND b.png_path IS NOT NULL
-      AND b.roi_energy_fraction >= 0.9
-      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
-    ORDER BY a.sample_id;
-
   clear26_cam3_to_cam2_basis: |
     SELECT
       a.png_path || '|' || b.png_path AS image_pair,
@@ -105,17 +72,16 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  # Single-Gaussian prior tuned to the measured evaluation size distribution.
-  # area_boost_scale sets the inverse-area intensity dependence.
-  total_Guassian_num: 1
+  # SGM parameters calibrated against measured cam2 real-beam coefficient maps.
+  total_Guassian_num: 3
   max_pixel_value: 1.0
-  max_intensity: 0.02
-  area_boost_scale: 0.0015
+  max_intensity: 0.05
+  area_boost_scale: 0.000980392156862745
   max_peak_intensity: null
-  minimum_pixel_threshold: 0.005
-  fade_rate: 0.02
+  minimum_pixel_threshold: 0.02
+  fade_rate: 0.3
   std_1: 0.05
-  std_2: 0.22
+  std_2: 0.15
   distribution: "other"
   process_functions:
     - name: "resize"
@@ -152,9 +118,9 @@ dataset_structure:
 data:
   pipeline_case: spatial_nearest_combinator
   dataset_sources: ["processed_405_stimuation_large", "processed_405_realbeam_eval_256"]
-  train_sql_key: clear26_cam1_to_cam2_basis
-  eval_sql_key: clear26_cam1_to_cam2_eval
-  pattern_sql_key: clear26_cam1_to_cam2_basis
+  train_sql_key: clear26_cam3_to_cam2_basis
+  eval_sql_key: clear26_cam3_to_cam2_eval
+  pattern_sql_key: clear26_cam3_to_cam2_basis
   provider_output_column: image_pair
   total_train_samples: 5000
   val_test_split: 0.5
@@ -188,7 +154,7 @@ data:
             - name: "torch_subtract_background"
               params:
                 background_source: ${paths.processed_405_background}
-                camera: "cam1"
+                camera: "cam3"
                 clip_min: 0.0
             - name: "torch_subtract_background"
               params:
@@ -196,23 +162,21 @@ data:
                 camera: "cam2"
                 clip_min: 0.0
       # Fixed count normalizers from background-subtracted evaluation peak p99.5
-      # plus margin: cam1 1600, cam2 900. Basis values may exceed 1; clipping
-      # is applied after combination.
+      # plus margin: cam3 2100, cam2 900. Clipping follows combination.
       - name: "multi_transform"
         params:
           transforms:
             - name: "torch_remap_range"
               params:
                 current_min: 0.0
-                current_max: 1600.0
+                current_max: 2100.0
             - name: "torch_remap_range"
               params:
                 current_min: 0.0
                 current_max: 900.0
   basis_transforms:
     torch:
-      # Replace basis target spots with energy-preserving Gaussian kernels at
-      # their centroids. The input slot passes through unchanged.
+      # Replace basis target spots with energy-preserving centroid kernels.
       - name: "multi_transform"
         params:
           transforms:
@@ -220,12 +184,14 @@ data:
             - name: "torch_render_centroid_kernel"
               params:
                 sigma: 4.0
+      # Input scale 0.28 comes from the measured synthetic/evaluation energy
+      # ratio of 3.58; target scale is 0.26.
       - name: "multi_transform"
         params:
           transforms:
             - name: "torch_scale"
               params:
-                scale_factor: 0.26
+                scale_factor: 0.28
             - name: "torch_scale"
               params:
                 scale_factor: 0.26
@@ -245,17 +211,16 @@ combinator:
   clip_output: [0.0, 1.0]
   transforms:
     torch:
-      # Input sensor noise fitted to the spatial noise gap between evaluation
-      # cam1 frames and synthetic combinations. param_jitter spans the temporal
-      # photon-transfer estimate; the target slot is clipped only.
+      # Input noise uses the measured cam3 spatial noise-gap fit:
+      # a=0.118, b=4.82, count_scale=2100. The target slot is clipped only.
       - name: "multi_transform"
         params:
           transforms:
             - name: "torch_sensor_noise"
               params:
-                a: 0.106
-                b: 2.81
-                count_scale: 1600.0
+                a: 0.118
+                b: 4.82
+                count_scale: 2100.0
                 param_jitter: 2.0
                 gain: null
                 clip_min: 0.0
@@ -299,7 +264,7 @@ image_generator:
         interpolation: "bilinear"
 
 weighted_stream:
-  real_weight: 0.0
-  sgm_weight: 1.0
+  real_weight: 0.7
+  sgm_weight: 0.3
 
 extra_files: ["models/CAE.py"]

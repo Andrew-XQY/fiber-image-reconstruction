@@ -105,7 +105,7 @@ def report(title, stats, n, thr):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", default="CLEAR26_sgm_cam3")
+    ap.add_argument("--config", default="CLEAR26_405_cam3_sgm")
     ap.add_argument("--sql", default=None, help="SQL key (default: eval_sql_key)")
     ap.add_argument("--limit", type=int, default=None, help="max real targets")
     ap.add_argument("--synth", action="store_true",

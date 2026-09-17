@@ -10,7 +10,7 @@ Stage 3  full TorchTrainer.fit() with the production callbacks (early stopping,
          snapshot of the best-val epoch (restore_best).
 
 Run from repo root on a machine with the datasets + xflow (no basis caching):
-    EXPERIMENT_CONFIG=CLEAR26_sgm_cam3 python -m probes.verify_val_frozen
+    EXPERIMENT_CONFIG=CLEAR26_405_cam3_sgm python -m probes.verify_val_frozen
 """
 import hashlib
 import os
@@ -48,7 +48,7 @@ def changed_keys(a, b):
 
 
 def main():
-    name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_sgm_cam3")
+    name = os.getenv("EXPERIMENT_CONFIG", "CLEAR26_405_cam3_sgm")
     config = ConfigManager(
         load_config(f"{name}.yaml", experiment_name=f"{name}-verify-val-frozen",
                     machine=detect_machine(), resolve=True)

@@ -1,16 +1,15 @@
 # CLEAR 2026 reconstruction: cam3 input, cam2 target.
-# Measured stimulation basis with a 70/30 real-pattern/SGM mixture.
-# Real coefficient maps come from the unsplit evaluation database.
-# Cam3 calibration recorded on 2026-07-06 using evaluation peaks,
-# synthetic/evaluation energy ratios, and a spatial noise-gap fit.
+# SGM coefficient maps combine a measured stimulation basis.
+# The real-pattern stream is disabled. Prior and camera calibration
+# use measured evaluation-target statistics.
 
 seed: &seed 42
-name: &config "CLEAR26_cam3.yaml"
+name: &config "CLEAR26_405_cam3_sgm.yaml"
 framework: "pytorch"
 file_extract: False
 note: |
-  Reconstruct cam3 fiber images as cam2 screen images using a measured stimulation basis.
-  Training combines the basis with 70% real-target coefficient maps from the unsplit evaluation database and 30% SGM maps.
+  Reconstruct cam3 fiber images as cam2 screen images using SGM coefficient maps over a measured stimulation basis.
+  The real-pattern stream is disabled; the prior and calibration use measured evaluation statistics.
 
 paths:
   output: ${paths.output_root}
@@ -28,10 +27,45 @@ model:
   encoder:          [64,   128, 128, 256, 512, 1024]
   decoder:          [1024, 512, 256, 128, 128, 64  ]
   apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
-  apply_dropout:    [1,    1,   0,   0,   0,   0   ]
+
+  apply_dropout:    [0,    0,   0,   0,   0,   0   ]
   final_activation: sigmoid
 
 sql:
+  clear26_cam1_to_cam2_basis: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.75
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+  clear26_cam1_to_cam2_eval: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam1'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.roi_energy_fraction >= 0.9
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
   clear26_cam3_to_cam2_basis: |
     SELECT
       a.png_path || '|' || b.png_path AS image_pair,
@@ -72,17 +106,25 @@ sql:
 
 simulation:
   canvas_size: [256, 256]
-  # SGM parameters calibrated against measured cam2 real-beam coefficient maps.
-  total_Guassian_num: 3
+  # SGM prior fitted to measured evaluation-target marginals: width,
+  # centroid radius, peak intensity, and footprint. Explicit intensity,
+  # radius, and aspect ranges replace the fallback sampler settings.
+  total_Guassian_num: 1
   max_pixel_value: 1.0
-  max_intensity: 0.05
-  area_boost_scale: 0.000980392156862745
+  max_intensity: 0.02        # ignored while intensity_range is set (fallback)
+  area_boost_scale: 0.0      # Disable the additional amplitude boost.
   max_peak_intensity: null
   minimum_pixel_threshold: 0.02
-  fade_rate: 0.3
-  std_1: 0.05
-  std_2: 0.15
+  fade_rate: 0.02            # ignored while intensity_range is set (fallback)
+  std_1: 0.06
+  std_2: 0.11
   distribution: "other"
+  # Coefficient amplitudes were calibrated before rendering, whose measured
+  # amplitude gain was about 4.5. The earlier [0.30, 0.75] coefficient range
+  # saturated rendered targets at clip=1.
+  intensity_range: [0.07, 0.16]
+  center_radius_range: [0.0, 0.39]
+  aspect_range: [0.7, 1.55]
   process_functions:
     - name: "resize"
       params:
@@ -90,9 +132,18 @@ simulation:
         interpolation: "area"
     - name: "shrink_to_canvas"
       params:
-        scale: 0.95
+        scale: 1.0    # Full canvas scale.
         fill: 0.0
         interpolation: "area"
+
+# Optional rendered-target rejection sampling; disabled in this configuration.
+sgm_validator:
+  enabled: false
+  peak_range: [0.20, 0.90]
+  footprint_range: [0.05, 0.20]
+  footprint_threshold: 0.05
+  centroid_radius_max: 0.42
+  max_retries: 20
 
 training:
   epochs: &epochs 100
@@ -162,7 +213,8 @@ data:
                 camera: "cam2"
                 clip_min: 0.0
       # Fixed count normalizers from background-subtracted evaluation peak p99.5
-      # plus margin: cam3 2100, cam2 900. Clipping follows combination.
+      # plus margin: cam3 2100, cam2 900. Basis values may exceed 1; clipping
+      # is applied after combination.
       - name: "multi_transform"
         params:
           transforms:
@@ -176,7 +228,8 @@ data:
                 current_max: 900.0
   basis_transforms:
     torch:
-      # Replace basis target spots with energy-preserving centroid kernels.
+      # Replace basis target spots with energy-preserving Gaussian kernels at
+      # their centroids. The input slot passes through unchanged.
       - name: "multi_transform"
         params:
           transforms:
@@ -264,7 +317,7 @@ image_generator:
         interpolation: "bilinear"
 
 weighted_stream:
-  real_weight: 0.7
-  sgm_weight: 0.3
+  real_weight: 0.0
+  sgm_weight: 1.0
 
 extra_files: ["models/CAE.py"]

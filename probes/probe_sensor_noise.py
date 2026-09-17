@@ -18,7 +18,7 @@ Feeds: combinator -> torch_sensor_noise.{a, b, count_scale}
 (count_scale itself comes from probe_normalizer, not from this fit.)
 
 Run from repo root:
-  python -m probes.probe_sensor_noise --config CLEAR26_sgm_cam3
+  python -m probes.probe_sensor_noise --config CLEAR26_405_cam3_sgm
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def fit_noise(diffs, signals, n_bins, min_per_bin, s_max):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", default="CLEAR26_sgm_cam3")
+    ap.add_argument("--config", default="CLEAR26_405_cam3_sgm")
     ap.add_argument("--slot", choices=["input", "target"], default="input")
     ap.add_argument("--sql", default=None, help="SQL key (default: eval_sql_key)")
     ap.add_argument("--limit", type=int, default=200, help="max frames")
