@@ -1,0 +1,9 @@
+# Tested in the existing /opt/anaconda3/envs/torch environment (Python 3.10).
+numpy>=1.26
+scipy>=1.11
+scikit-learn>=1.5
+umap-learn>=0.5.7
+matplotlib>=3.8
+pillow>=10
+plotly>=5.18
+threadpoolctl>=3.1
