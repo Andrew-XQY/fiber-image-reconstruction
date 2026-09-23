@@ -48,9 +48,9 @@ datasets/
 *.pt
 *.hdf5
 
-# Outputs
-results/*
-!results/.gitkeep
+# Outputs: all generated evaluation artifacts and caches stay local.
+/results/*
+!/results/.gitkeep
 outputs/
 runs/
 wandb/
