@@ -135,6 +135,10 @@ def main():
         extract_beam_parameters_dict = partial(extract_beam_parameters, as_array=False)
         beam_param_metric = make_beam_param_metric(extract_beam_parameters_dict)
 
+    if model_name not in REGRESSION:
+        # Finalize beam metrics using successful-fit counts before other callbacks.
+        callbacks.insert(0, beam_param_metric)
+
     # 3) run training
     if model_name in GAN:
         trainer = TorchGANTrainer(

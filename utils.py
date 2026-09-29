@@ -875,7 +875,40 @@ def debug_extract_fn(img, **kwargs):
         return None
 
 def make_beam_param_metric(extract_fn):
+    """Batch metrics; register the callable as a callback too for valid-fit epoch means."""
+    epoch_abs, epoch_sq, epoch_counts = {}, {}, {}
+    epoch_samples = 0
+    collecting = False
+
+    def on_val_epoch_begin(ctx):
+        nonlocal epoch_samples, collecting
+        epoch_abs.clear()
+        epoch_sq.clear()
+        epoch_counts.clear()
+        epoch_samples = 0
+        collecting = True
+
+    def on_val_epoch_end(ctx):
+        nonlocal collecting
+        if not collecting:
+            return
+        # Update the existing log dictionary before history/early stopping read it.
+        # Emit NaN (not zero) even if every fit in this epoch failed.
+        keys = dict.fromkeys(("h_centroid", "v_centroid", "h_width", "v_width", "overall", *epoch_counts))
+        for k in keys:
+            n = epoch_counts.get(k, 0)
+            mae = epoch_abs[k] / n if n else float("nan")
+            mse = epoch_sq[k] / n if n else float("nan")
+            ctx.logs[f"val_{k}_mae"] = mae
+            ctx.logs[f"val_{k}_mse"] = mse
+            ctx.logs[f"val_{k}_rmse"] = mse ** 0.5
+        valid = epoch_counts.get("overall", 0)
+        ctx.logs["val_beam_valid_samples"] = valid
+        ctx.logs["val_beam_failed_samples"] = epoch_samples - valid
+        collecting = False
+
     def metric(pred, target):
+        nonlocal epoch_samples
         
         if isinstance(pred, torch.Tensor):
             pred = pred.detach().cpu()
@@ -910,6 +943,13 @@ def make_beam_param_metric(extract_fn):
                 sums_sq["overall"]  = sums_sq.get("overall", 0.0)  + math.fsum(d * d for d in diffs) / len(diffs)
                 counts["overall"]   = counts.get("overall", 0) + 1
 
+        if collecting:
+            epoch_samples += B
+            for k, n in counts.items():
+                epoch_abs[k] = epoch_abs.get(k, 0.0) + sums_abs[k]
+                epoch_sq[k] = epoch_sq.get(k, 0.0) + sums_sq[k]
+                epoch_counts[k] = epoch_counts.get(k, 0) + n
+
         out = {}
         for k, n in counts.items():
             out[f"val_{k}_mae"]  = sums_abs[k] / n
@@ -917,6 +957,9 @@ def make_beam_param_metric(extract_fn):
             out[f"val_{k}_rmse"] = (sums_sq[k] / n) ** 0.5
         return out
 
+    # Existing XFlow callback hooks; the per-batch dict[str, float] API is unchanged.
+    metric.on_val_epoch_begin = on_val_epoch_begin
+    metric.on_val_epoch_end = on_val_epoch_end
     return metric
 
 # --- Param-based metric (no image extraction) ---
@@ -933,25 +976,26 @@ def make_param_metric(keys=("h_centroid","v_centroid","h_width","v_width")):
     def metric(pred, target):
         p = _to_vec(pred)
         t = _to_vec(target)
-        n = min(len(p), len(t))
-        if n < 4:  # nothing to score
+        m = len(keys)
+        n = min(len(p), len(t)) // m  # number of complete samples in the batch
+        if n < 1:  # nothing to score
             return {}
 
-        # take first len(keys) values
-        p = p[:len(keys)]
-        t = t[:len(keys)]
+        # Score EVERY sample: the flattened (B, m) vector holds sample i at [i*m:(i+1)*m].
+        diffs = [[p[i * m + j] - t[i * m + j] for j in range(m)] for i in range(n)]
 
         out = {}
-        diffs = [pi - ti for pi, ti in zip(p, t)]
-        for k, d in zip(keys, diffs):
-            out[f"val_{k}_mae"]  = abs(d)
-            out[f"val_{k}_mse"]  = d*d
-            out[f"val_{k}_rmse"] = abs(d)**0.5 if d >= 0 else (d*d)**0.5
+        for j, k in enumerate(keys):
+            col = [d[j] for d in diffs]
+            mse = sum(d * d for d in col) / n
+            out[f"val_{k}_mae"]  = sum(abs(d) for d in col) / n
+            out[f"val_{k}_mse"]  = mse
+            out[f"val_{k}_rmse"] = mse ** 0.5
 
-        # simple overall
-        overall_mae = sum(abs(d) for d in diffs) / len(diffs)
-        overall_mse = sum(d*d for d in diffs) / len(diffs)
-        out["val_overall_mae"]  = overall_mae
+        # simple overall: mean over all samples and parameters
+        flat = [d for row in diffs for d in row]
+        overall_mse = sum(d * d for d in flat) / len(flat)
+        out["val_overall_mae"]  = sum(abs(d) for d in flat) / len(flat)
         out["val_overall_mse"]  = overall_mse
         out["val_overall_rmse"] = overall_mse ** 0.5
         return out
