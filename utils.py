@@ -266,8 +266,30 @@ def save_evaluation_contract(
     return path
 
 
-def build_eval_datasets(config: dict) -> dict:
-    """Build validation/test data once, identically for training and inference."""
+def _subset_provider(provider: SqlProvider, items: list) -> SqlProvider:
+    """Provider holding exactly `items`, in that order, taken from `provider`."""
+    rows = provider._unified_df.set_index(
+        provider._output_config["list"], drop=False
+    )
+    missing = set(items) - set(rows.index)
+    if missing or not rows.index.is_unique:
+        raise ValueError(
+            f"Saved split does not match the current eval data "
+            f"({len(missing)} saved items missing)."
+        )
+    subset = SqlProvider()
+    subset._unified_df = rows.loc[items].reset_index(drop=True)
+    subset._output_config = dict(provider._output_config)
+    return subset
+
+
+def build_eval_datasets(config: dict, split_items: dict = None) -> dict:
+    """Build validation/test data once, identically for training and inference.
+
+    split_items: optional saved evaluation contract. Its val_items/test_items
+    are reused instead of re-splitting, because SQL rows with tied ORDER BY
+    keys can come back in a different order on another machine.
+    """
     dataset_sources = config["data"].get(
         "dataset_sources", ["processed_chromox_cropped"]
     )
@@ -296,10 +318,16 @@ def build_eval_datasets(config: dict) -> dict:
     )
     split_ratio = float(config["data"]["val_test_split"])
     split_seed = int(config["data"].get("val_test_seed", config.get("seed", 42)))
-    val_provider, test_provider = full_eval_provider.split(
-        split_ratio,
-        seed=split_seed,
-    )
+    if split_items is None:
+        val_provider, test_provider = full_eval_provider.split(
+            split_ratio,
+            seed=split_seed,
+        )
+    else:
+        val_provider = _subset_provider(full_eval_provider, split_items["val_items"])
+        test_provider = _subset_provider(full_eval_provider, split_items["test_items"])
+        if len(val_provider) + len(test_provider) != len(full_eval_provider):
+            raise ValueError("Saved split does not cover the current eval data.")
 
     raw_transform_config = deepcopy(config["data"]["transforms"]["torch"])
     raw_transform_config.extend(
@@ -863,21 +891,24 @@ def make_beam_param_metric(extract_fn):
             if p is None or t is None:
                 continue  # skip invalid samples
 
-            # Add "overall" from original values only
-            p_vals = [float(v) for v in p.values()]
-            t_vals = [float(v) for v in t.values()]
-            if p_vals:
-                p = {**p, "overall": math.fsum(p_vals) / len(p_vals)}
-            if t_vals:
-                t = {**t, "overall": math.fsum(t_vals) / len(t_vals)}
-
+            diffs = []
             for k in p.keys():
                 if k not in t:
                     continue  # skip if target missing this key
                 diff = float(p[k]) - float(t[k])
+                diffs.append(diff)
                 sums_abs[k] = sums_abs.get(k, 0.0) + abs(diff)      # MAE parts
                 sums_sq[k]  = sums_sq.get(k, 0.0)  + diff * diff    # MSE parts
                 counts[k]   = counts.get(k, 0) + 1
+
+            # "overall": mean over parameters of the per-parameter error, with
+            # the sign removed BEFORE averaging so opposite-signed errors on
+            # different parameters cannot cancel. Equals the mean of the
+            # per-parameter MAE / MSE.
+            if diffs:
+                sums_abs["overall"] = sums_abs.get("overall", 0.0) + math.fsum(abs(d) for d in diffs) / len(diffs)
+                sums_sq["overall"]  = sums_sq.get("overall", 0.0)  + math.fsum(d * d for d in diffs) / len(diffs)
+                counts["overall"]   = counts.get("overall", 0) + 1
 
         out = {}
         for k, n in counts.items():
