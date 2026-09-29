@@ -12,6 +12,12 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from xflow.extensions.style.aps import APS_COLORS, set_aps_double_column
+from beam_scores import (  # noqa: F401  (re-exported for the notebook)
+    append_mm_columns,
+    compute_sample_relative_width_scores,
+    frame_mm_from_dataset,
+    scale_metrics_to_mm,
+)
 
 # Save every figure as transparent vector PDF by default.
 # `.pdf` extension on savefig() triggers the vector backend automatically;
