@@ -265,6 +265,7 @@ data:
 combinator:
   jitter_mode: global_cell
   jitter_alpha: 1.0
+  max_assign_cells: 1.0   # drop pattern cells with no laser spot within one cell (outer ring of the scan) instead of assigning the nearest edge spot
   generation_batch_size: *batch
   clip_output: [0.0, 1.0]
   transforms:

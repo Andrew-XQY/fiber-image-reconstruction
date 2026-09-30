@@ -581,6 +581,9 @@ def build_datasets(config: dict) -> dict:
         intensity_scale=intensity_scale,
         clip_output=tuple(config["combinator"].get("clip_output", (0.0, 1.0))),
         transforms=build_transforms_from_config(config["combinator"]["transforms"]["torch"]),
+        # Cells with no basis spot within this many pattern cells get no
+        # coefficient (None = legacy: always assign the nearest spot).
+        max_assign_cells=config["combinator"].get("max_assign_cells"),
     )
 
     # Optional rejection sampling on generated pairs (see make_beam_target_validator).

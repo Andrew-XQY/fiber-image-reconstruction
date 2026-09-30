@@ -99,10 +99,15 @@ def main():
 
     print(info)
     model_device = next(model.parameters()).device
-    report = build_model_report(
-        model,
-        lambda: model(torch.randn(1, config["model"].get("in_channels", 1), *config["data"]["input_shape"], device=model_device))
-    )
+    # Shape-trace forward on a random tensor: run in eval mode under no_grad so
+    # BatchNorm running statistics are not updated by noise before training.
+    model.eval()
+    with torch.no_grad():
+        report = build_model_report(
+            model,
+            lambda: model(torch.randn(1, config["model"].get("in_channels", 1), *config["data"]["input_shape"], device=model_device))
+        )
+    model.train()
     with open(f"{config['paths']['output']}/model_report.txt", "w", encoding="utf-8") as f:
         f.write(report)
     config_manager.save(output_dir=config["paths"]["output"], config_filename=config["name"])
