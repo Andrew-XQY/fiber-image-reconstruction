@@ -35,6 +35,49 @@ def compute_sample_relative_width_scores(df: pd.DataFrame, fit_method: str = "ga
     return results
 
 
+# Per-sample columns of the Gaussian scores above. The names leave out
+# "gaussian"/"moments" on purpose: the notebook and refresh row filters treat
+# every column containing those words as a fit value, so these columns can
+# never change which rows are scored.
+RELATIVE_WIDTH_COLUMNS = {dim: f"sample_relative_{dim}_width_error" for dim in ("h", "v")}
+
+
+def _as_float(text: str) -> float:
+    try:
+        return float(text)
+    except ValueError:
+        return float("nan")
+
+
+def append_relative_width_columns(csv_path) -> list[str]:
+    """Add per-sample Gaussian ``sample_relative_{h,v}_width_error`` columns,
+    (predicted - true) / true, to a beam_parameters.csv.
+
+    Same rule as compute_sample_relative_width_scores (left empty where the true
+    width is not positive or a value is missing), so mean |column| over the scored
+    rows is ``gaussian_sample_relative_{h,v}_width_mae``. Existing columns are kept
+    byte for byte; already present columns are recomputed in place.
+    """
+    csv_path = Path(csv_path)
+    rows = list(csv.reader(csv_path.read_text(encoding="utf-8").splitlines()))
+    header, body = rows[0], rows[1:]
+    new_names = list(RELATIVE_WIDTH_COLUMNS.values())
+    keep = [i for i, name in enumerate(header) if name not in new_names]
+    index = {name: i for i, name in enumerate(header)}
+    out = [[header[i] for i in keep] + new_names]
+    for row in body:
+        values = []
+        for dim in RELATIVE_WIDTH_COLUMNS:
+            y = _as_float(row[index[f"label_gaussian_{dim}_width"]])
+            yh = _as_float(row[index[f"reconstructed_gaussian_{dim}_width"]])
+            valid = np.isfinite(y) and np.isfinite(yh) and y > 0
+            values.append(repr((yh - y) / y) if valid else "")
+        out.append([row[i] for i in keep] + values)
+    with csv_path.open("w", encoding="utf-8", newline="") as stream:
+        csv.writer(stream, lineterminator="\n").writerows(out)
+    return new_names
+
+
 # ---------------------------------------------------------------- physical units
 # Frame-normalised parameters (xflow normalize_beam_parameters): widths are
 # divided by the frame size in pixels, centroids by frame size - 1. Multiplying
