@@ -13,7 +13,9 @@ from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from xflow.extensions.style.aps import APS_COLORS, set_aps_double_column
 from beam_scores import (  # noqa: F401  (re-exported for the notebook)
+    RELATIVE_WIDTH_COLUMNS,
     append_mm_columns,
+    append_relative_width_columns,
     compute_sample_relative_width_scores,
     frame_mm_from_dataset,
     scale_metrics_to_mm,
@@ -520,6 +522,33 @@ def make_three_plots(df, param_type="centroid", fit_method="gaussian",
                                    scale=scale,
                                    y_num_ticks=hist_y_num_ticks)
     return f1, f2, f3
+
+
+def plot_relative_width_error_vs_width(df, n_bins=8, stat="median",
+                                       dims=("h", "v"), scale=1.0):
+    """|Relative Gaussian width error| versus actual beam width, one curve per dim.
+
+    x = ``label_gaussian_{dim}_width_mm``; y = |``sample_relative_{dim}_width_error``|
+    in % (beam_scores.append_relative_width_columns). Samples are sorted by actual
+    width and split into `n_bins` equal-count bins; each marker is one bin's median
+    width and its `stat` ("median" or "mean") of |relative error|.
+    """
+    reduce = {"median": np.median, "mean": np.mean}[stat]
+    fig, ax = _new_ax(scale=scale)
+    for dim in dims:
+        x = pd.to_numeric(df[f"label_gaussian_{dim}_width_mm"], errors="coerce").to_numpy(dtype=float)
+        y = 100.0 * np.abs(pd.to_numeric(df[RELATIVE_WIDTH_COLUMNS[dim]], errors="coerce").to_numpy(dtype=float))
+        m = np.isfinite(x) & np.isfinite(y)
+        x, y = x[m], y[m]
+        bins = [b for b in np.array_split(np.argsort(x, kind="stable"), n_bins) if b.size]
+        ax.plot([np.median(x[b]) for b in bins], [reduce(y[b]) for b in bins], "-o",
+                lw=2.0, ms=6, color=DIM_STYLE[dim]["color"],
+                label=f"{DIM_STYLE[dim]['name']} width")
+    ax.set_ylim(bottom=0.0)
+    ax.set_xlabel("Actual beam width (mm)", fontsize=AXIS_LABEL_SIZE)
+    ax.set_ylabel(f"{stat.capitalize()} relative width error (%)", fontsize=AXIS_LABEL_SIZE)
+    _legend(ax, fontsize=LEGEND_FONT_SIZE)
+    return fig, ax
 
 
 # #########################################################

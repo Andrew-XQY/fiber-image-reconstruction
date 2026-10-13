@@ -3,8 +3,10 @@ runs: sample-relative Gaussian width errors, and with --pixel-scale/--eval-db
 also the physical (mm) values and scores.
 
 Per <run>/inference/: new keys are added to _fit_metrics.json (or refreshed on
-a re-run) and, for mm, new columns are appended to beam_parameters.csv. Every
-existing key, value and column stays exactly as it was. A run is skipped when
+a re-run) and the per-sample sample_relative_{h,v}_width_error columns (plus,
+for mm, the *_mm columns) are appended to beam_parameters.csv; the per-sample
+columns are checked against the aggregate scores before the JSON is written.
+Every existing key, value and column stays exactly as it was. A run is skipped when
 beam_parameters.csv is missing or its valid-fit row count differs from the
 saved score_selected_samples (the notebook scored it with an extra filter).
 
@@ -29,7 +31,9 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "notebooks"))
 from beam_scores import (  # noqa: E402
+    RELATIVE_WIDTH_COLUMNS,
     append_mm_columns,
+    append_relative_width_columns,
     compute_sample_relative_width_scores,
     frame_mm_from_dataset,
     scale_metrics_to_mm,
@@ -44,6 +48,18 @@ def selected_rows(csv_path: Path) -> pd.DataFrame:
     fit_values = raw[fit_columns].apply(pd.to_numeric, errors="coerce")
     fit_valid = np.isfinite(fit_values).all(axis=1) & ~fit_values.eq(0).any(axis=1)
     return raw.loc[fit_valid].reset_index(drop=True)
+
+
+def check_relative_width_columns(csv_path: Path, scores: dict) -> None:
+    """The per-sample columns must reproduce the aggregate sample-relative scores."""
+    df = selected_rows(csv_path)
+    for dim, column in RELATIVE_WIDTH_COLUMNS.items():
+        rel = pd.to_numeric(df[column], errors="coerce").to_numpy(dtype=float)
+        got = (np.nanmean(np.abs(rel)), np.nanmedian(np.abs(rel)), np.nanmean(rel))
+        key = f"gaussian_sample_relative_{dim}_width"
+        want = tuple(scores[f"{key}_{stat}"] for stat in ("mae", "medae", "bias"))
+        if not np.allclose(got, want, rtol=1e-12, atol=0.0, equal_nan=True):
+            raise RuntimeError(f"{csv_path}: {column} gives {got}, scores {key}_* are {want}")
 
 
 def main() -> None:
@@ -94,6 +110,8 @@ def main() -> None:
             continue
         if frame_mm is not None:
             append_mm_columns(csv_path, *frame_mm, frame_px=args.frame_px)
+        append_relative_width_columns(csv_path)
+        check_relative_width_columns(csv_path, scores)
         merged = {**original, **scores}  # existing keys keep their values and order
         metrics_path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
         print(f"OK    {run} (n={len(df)}, {action}): {summary}")
