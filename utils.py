@@ -21,6 +21,7 @@ from xflow.extensions.physics.pipeline import (
     make_centroid_position_extractor,
 )
 from xflow.extensions.physics import pattern_gen
+from sgm_fixed import fixed_pattern_stream
 
 SAMPLE_FLATTENED = ['SHL_DNN']
 REGRESSION = ['ERN'] # Encoder-regressor
@@ -527,11 +528,6 @@ def build_datasets(config: dict) -> dict:
                 seed=int(config["seed"]),
                 strategy="random",
             )
-    pattern_source_provider = SqlProvider(
-        sources={"connection": pattern_db_path, "sql": config["sql"][pattern_sql_key]},
-        output_config={"list": provider_output_column},
-    )
-
     train_transforms = build_transforms_from_config(
         _with_parent_dir(config["data"]["transforms"]["torch"], train_db_path.parent)
     )
@@ -544,26 +540,39 @@ def build_datasets(config: dict) -> dict:
                 _with_parent_dir(basis_transforms_config, train_db_path.parent)
             )
         )
-    pattern_transforms = build_transforms_from_config(
-        _with_parent_dir(config["image_generator"]["transforms"], pattern_db_path.parent)
-    )
-
-    real_stream = pattern_gen.image_pattern_stream(
-        source=pattern_source_provider,
-        transforms=pattern_transforms,
-        shuffle=False,
-        seed=config["seed"],
-        cache_transformed=config["image_generator"].get("cache_transformed", False),
-    )
-    sgm_stream = build_sgm_stream(config)
-    mixed_stream = pattern_gen.weighted_stream(
-        sources=[real_stream, sgm_stream],
-        probabilities=[
-            config["weighted_stream"]["real_weight"],
-            config["weighted_stream"]["sgm_weight"],
-        ],
-        seed=config["seed"],
-    )
+    fixed_set_cfg = config["simulation"].get("fixed_set")
+    if fixed_set_cfg:
+        # Fixed pattern set (parameter CSV + manifest): the same maps in the same
+        # order for every run and seed. No real-pattern stream, no on-the-fly SGM.
+        pattern_stream = fixed_pattern_stream(
+            fixed_set_cfg["csv"],
+            fixed_set_cfg["manifest"],
+            first_n=fixed_set_cfg.get("first_n"),
+        )
+    else:
+        pattern_source_provider = SqlProvider(
+            sources={"connection": pattern_db_path, "sql": config["sql"][pattern_sql_key]},
+            output_config={"list": provider_output_column},
+        )
+        pattern_transforms = build_transforms_from_config(
+            _with_parent_dir(config["image_generator"]["transforms"], pattern_db_path.parent)
+        )
+        real_stream = pattern_gen.image_pattern_stream(
+            source=pattern_source_provider,
+            transforms=pattern_transforms,
+            shuffle=False,
+            seed=config["seed"],
+            cache_transformed=config["image_generator"].get("cache_transformed", False),
+        )
+        sgm_stream = build_sgm_stream(config)
+        pattern_stream = pattern_gen.weighted_stream(
+            sources=[real_stream, sgm_stream],
+            probabilities=[
+                config["weighted_stream"]["real_weight"],
+                config["weighted_stream"]["sgm_weight"],
+            ],
+            seed=config["seed"],
+        )
     # Optional per-sample global intensity jitter (input AND target scaled
     # together) -> intensity equivariance. Scalar or [lo, hi]; 1.0 = legacy.
     intensity_scale = config["combinator"].get("intensity_scale", 1.0)
@@ -573,7 +582,7 @@ def build_datasets(config: dict) -> dict:
         intensity_scale = float(intensity_scale)
 
     combinator = SpatialNearestCombinator(
-        pattern_provider=mixed_stream,
+        pattern_provider=pattern_stream,
         skip_zero=True,
         eps=1e-8,
         jitter_mode=config["combinator"].get("jitter_mode", "global_cell"),

@@ -22,6 +22,7 @@ paths:
 
     processed_690_background_256: "/workspace/dataset/processed/Thursday/690_background_256"
     processed_690_reflection_large_256: "/workspace/dataset/processed/Thursday/690_reflection_large_256"
+    processed_690_reflection_small_256: "/workspace/dataset/processed/Thursday/690_reflection_small_256"
     processed_690_realbeam_256: "/workspace/dataset/processed/Thursday/690_realbeam_256"
 
     processed_670_background_256: "/workspace/dataset/processed/Wednesday/670_background_256"
@@ -34,5 +35,8 @@ paths:
 
     processed_520_background_friday_256: "/workspace/dataset/processed/Friday/520_background_256"
     processed_520_stimulation_small_256: "/workspace/dataset/processed/Friday/520_stimulation_small_256"
+
+    # Fixed SGM pattern set (parameter CSV + manifest), see dataset/sgm_patterns/v1 on the Mac.
+    sgm_patterns_v1: "/workspace/dataset/sgm_patterns/v1"
 
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"

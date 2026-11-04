@@ -26,6 +26,7 @@ paths:
 
     processed_690_background_256: "/Users/andrewxu/Desktop/Workspace/dataset/processed/Thursday/690_background_256"
     processed_690_reflection_large_256: "/Users/andrewxu/Desktop/Workspace/dataset/processed/Thursday/690_reflection_large_256"
+    processed_690_reflection_small_256: "/Users/andrewxu/Desktop/Workspace/dataset/processed/Thursday/690_reflection_small_256"
     processed_690_realbeam_256: "/Users/andrewxu/Desktop/Workspace/dataset/processed/Thursday/690_realbeam_256"
 
     processed_670_background_256: "/Users/andrewxu/Desktop/Workspace/dataset/processed/Wednesday/670_background_256"
@@ -38,3 +39,5 @@ paths:
 
     processed_520_background_friday_256: "/Users/andrewxu/Desktop/Workspace/dataset/processed/Friday/520_background_256"
     processed_520_stimulation_small_256: "/Users/andrewxu/Desktop/Workspace/dataset/processed/Friday/520_stimulation_small_256"
+
+    sgm_patterns_v1: "/Users/andrewxu/Desktop/Workspace/dataset/sgm_patterns/v1"

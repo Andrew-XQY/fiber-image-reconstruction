@@ -1,0 +1,285 @@
+# CLEAR 2026 clean round, run 1.
+# Basis: Friday 520 nm excitation, small raster (union 7); background union 6, recorded 30 min before it.
+# Input cam3 (fibre), target cam2 (screen).
+# Dev beam run: Friday 405 raster (union 4). Used only for calibration (first 100 beam
+# frames, probes) and validation (beam frames after a 20-frame buffer).
+# Sealed runs Friday/405_realbeam_random_256 (union 3) and Thursday/690_realbeam_256
+# (union 12) are never referenced here; a separate inference script scores them once.
+# Pattern prior: fixed SGM set v1 (dataset/sgm_patterns/v1). Real-pattern stream off.
+# Seed: SEED env (default 42). Run folder = <name>-<timestamp>.
+# Sibling files of this round change only the `paths` aliases and `constants`.
+# Basis changed from Thursday 690 small (union 14) to this run on 2026-11-04.
+
+seed: &seed ${oc.decode:${oc.env:SEED,42}}
+name: &config "CLEAR26_clean_520small_cam3.yaml"
+framework: "pytorch"
+file_extract: False
+note: |
+  Clean round run 1: one measured basis, one fibre, fixed SGM set v1, CAE unchanged.
+  Every measured number sits in `constants` and is fitted on sql.dev_calibration only.
+
+paths:
+  output: ${paths.output_root}
+  basis: ${paths.datasets.processed_520_stimulation_small_256}       # union 7, Friday 520 excitation, small raster
+  basis_background: ${paths.datasets.processed_520_background_friday_256}   # union 6, same block, 30 min before the basis run
+  dev: ${paths.datasets.processed_405_realbeam_raster_256}           # union 4, calibration + validation only
+  dev_background: ${paths.datasets.processed_405_background_256}     # union 1; see note at data.transforms
+  pattern_set: ${paths.datasets.sgm_patterns_v1}
+
+# Single source of truth for every number used in the transform chains below.
+# measured: PRE-CALIBRATION placeholders carried from CLEAR26_690_cam3_v3 / CLEAR26_405_cam3_sgm; none measured on a 520 basis.
+#           Replace each with the probe output on sql.dev_calibration; record date + probe commit here.
+# design:   shared by every run of the round, not fitted.
+constants:
+  fibre_count_max: 2200.0      # measured  cam3 remap + noise count_scale   probes/probe_normalizer cam3
+  beam_count_max: 500.0        # measured  cam2 remap                        probes/probe_normalizer cam2
+  noise_a: 0.118               # measured  cam3 var = a*signal + b (counts)  probes/probe_sensor_noise; camera property, 405 values
+  noise_b: 4.82                # measured  idem
+  basis_scale_input: 0.31      # measured  pre-noise basis scale             probes/probe_basis_scale, once per basis
+  basis_scale_target: 1.18     # measured  idem
+  post_l2_scale_input: 24.0    # design
+  post_l2_scale_target: 16.0   # design
+
+model:
+  name: "CAE"
+  in_channels: 1
+  out_channels: 1
+  kernel_size: 4
+  encoder:          [64,   128, 128, 256, 512, 1024]
+  decoder:          [1024, 512, 256, 128, 128, 64  ]
+  apply_batchnorm:  [0,    1,   1,   1,   1,   1   ]
+  apply_dropout:    [0,    0,   0,   0,   0,   0   ]
+  final_activation: sigmoid
+
+sql:
+  # Basis run: every laser spot. cam2 stat_max >= 500 drops empty frames (empty mode peaks < 300,
+  # spot mode 3000-4100 on this run). No ROI cutoff.
+  basis: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND a.stat_max > 0
+      AND a.stat_sum > 0
+      AND b.stat_max >= 500
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY a.sample_id;
+
+  # Dev run, beam present (cam2 stat_mean >= 3), time order. First 100 frames: probes only.
+  dev_calibration: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.stat_mean >= 3.0
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY b.acq_stamp_ns
+    LIMIT 100;
+
+  # Dev run, beam present, after the calibration window plus a 20-frame buffer. No ROI cutoff.
+  dev_validation: |
+    SELECT
+      a.png_path || '|' || b.png_path AS image_pair,
+      a.sample_id,
+      a.run_id
+    FROM images a
+    JOIN images b
+      ON a.sample_id = b.sample_id
+     AND a.run_id = b.run_id
+    WHERE a.camera = 'cam3'
+      AND b.camera = 'cam2'
+      AND a.png_path IS NOT NULL
+      AND b.png_path IS NOT NULL
+      AND b.stat_mean >= 3.0
+      AND abs(a.sync_time_ns - b.sync_time_ns) <= 1000000
+    ORDER BY b.acq_stamp_ns
+    LIMIT -1 OFFSET 120;
+
+# Pattern prior: fixed SGM set v1, rendered from the parameter CSV by sgm_fixed.py.
+# The manifest carries the prior, the render spec and the CSV sha256 (checked at load).
+simulation:
+  fixed_set:
+    csv: ${paths.pattern_set}/sgm_patterns_v1.csv
+    manifest: ${paths.pattern_set}/sgm_patterns_v1.json
+    first_n: 5000          # patterns 0..4999 only; the rest of the set is unused for now
+
+training:
+  epochs: &epochs 250
+  learning_rate: 1.0e-4
+  batch_size: &batch 32
+
+callbacks:
+  - name: "torch_batch_progress_bar"
+    params:
+      only_keys: ["train_loss", "val_loss"]
+  - name: "torch_early_stopping"
+    params:
+      monitor: "val_loss"
+      patience: 20
+  - name: "torch_image_reconstruction_callback"
+    params:
+      save_dir: ${paths.output}
+      include_training_images: True
+
+dataset_structure:
+  db: "dataset.db"
+
+data:
+  pipeline_case: spatial_nearest_combinator
+  dataset_sources: ["basis", "dev"]
+  train_sql_key: basis
+  eval_sql_key: dev_validation
+  calibration_sql_key: dev_calibration     # probes only; train.py never reads it
+  provider_output_column: image_pair
+  # Generated pairs per epoch (drawn on the fly, not cached). 5000 = one pass over the first
+  # 5000 patterns per epoch, same per-epoch compute as v3; patience and the epoch cap count passes.
+  total_train_samples: 5000
+  # val/test here are both inside the dev validation window (dev report + early stopping only).
+  # Random halves, pinned to one seed so every SEED sees the same halves. Sealed runs are not here.
+  val_test_split: 0.5
+  val_test_seed: 20261104
+  input_shape: &inp [256, 256]
+  output_shape: &out [256, 256]
+  # One chain serves the basis cache and the dev evaluation, so one background serves both.
+  # The basis background (union 6) is used; on the dev frames this leaves a residual of about
+  # 0.4 counts on cam3 (3.33 vs 2.90 mean) and 0.07 on cam2 (0.30 vs 0.23), before clip and L2.
+  # Per-source backgrounds need a loader change; paths.dev_background is ready for it.
+  transforms:
+    torch:
+      - name: "split_text"
+        params:
+          separator: "|"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "add_parent_dir"
+            - name: "add_parent_dir"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "load_image16"
+            - name: "load_image16"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_to_tensor"
+            - name: "torch_to_tensor"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.basis_background}
+                camera: "cam3"
+                clip_min: 0.0
+            - name: "torch_subtract_background"
+              params:
+                background_source: ${paths.basis_background}
+                camera: "cam2"
+                clip_min: 0.0
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: ${constants.fibre_count_max}
+            - name: "torch_remap_range"
+              params:
+                current_min: 0.0
+                current_max: ${constants.beam_count_max}
+  eval_extra_transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_l2_normalize"
+            - name: "torch_l2_normalize"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: ${constants.post_l2_scale_input}
+            - name: "torch_scale"
+              params:
+                scale_factor: ${constants.post_l2_scale_target}
+  basis_transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - null
+            - name: "torch_render_centroid_kernel"
+              params:
+                sigma: 8.0
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: ${constants.basis_scale_input}
+            - name: "torch_scale"
+              params:
+                scale_factor: ${constants.basis_scale_target}
+  dataset_ops:
+    - name: "torch_batch"
+      params:
+        batch_size: *batch
+        shuffle: True
+        num_workers: 0
+        prefetch_factor: 2
+        seed: *seed
+
+combinator:
+  jitter_mode: global_cell
+  jitter_alpha: 1.0
+  max_assign_cells: 1.0
+  generation_batch_size: *batch
+  clip_output: [0.0, 1.0]
+  transforms:
+    torch:
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_sensor_noise"
+              params:
+                a: ${constants.noise_a}
+                b: ${constants.noise_b}
+                count_scale: ${constants.fibre_count_max}
+                param_jitter: 2.0
+                gain: null
+                clip_min: 0.0
+            - null
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_l2_normalize"
+            - name: "l2_normalize"
+      - name: "multi_transform"
+        params:
+          transforms:
+            - name: "torch_scale"
+              params:
+                scale_factor: ${constants.post_l2_scale_input}
+            - name: "torch_scale"
+              params:
+                scale_factor: ${constants.post_l2_scale_target}
+
+extra_files: ["models/CAE.py", "sgm_fixed.py"]
