@@ -55,9 +55,10 @@ outputs/
 runs/
 wandb/
 
-# Paths of this computer. Only the cluster profile is tracked.
+# Paths of this computer. Only the cluster profile and the example are tracked.
 /conf/machine/*
 !/conf/machine/liverpool-hpc.yaml
+!/conf/machine/local.example.yaml
 /local_paths.json
 
 # OS files

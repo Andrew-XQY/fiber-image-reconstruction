@@ -28,7 +28,7 @@ paths:
   output_root: "./results/first-run"
 ```
 
-Each dataset folder needs `dataset.db` with the camera/sample metadata and its referenced 16-bit, 256-by-256 images. The datasets are not included. Choose a new output folder for each run.
+Each dataset folder needs `dataset.db` with the camera/sample metadata and its referenced 16-bit, 256-by-256 images. The datasets are not included. Choose a new output folder for each run. Git ignores `conf/machine/local.yaml`; `conf/machine/local.example.yaml` lists the dataset keys of all CLEAR26 experiment configs.
 
 Save this as `run_example.py` in the repository root. It selects the machine profile and experiment, then calls the training entry point:
 
