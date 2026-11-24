@@ -10,9 +10,9 @@ Every existing key, value and column stays exactly as it was. A run is skipped w
 beam_parameters.csv is missing or its valid-fit row count differs from the
 saved score_selected_samples (the notebook scored it with an extra filter).
 
-    python probes/refresh_beam_scores.py ~/Desktop/HPC/temp \\
-        --pixel-scale ~/Desktop/Workspace/dataset/chromox_pixel_scale.json \\
-        --eval-db ~/Desktop/Workspace/dataset/processed/Friday/405_realbeam_eval_256/dataset.db \\
+    python probes/refresh_beam_scores.py <runs_dir> \\
+        --pixel-scale <dataset_dir>/chromox_pixel_scale.json \\
+        --eval-db <dataset_root>/Friday/405_realbeam_eval_256/dataset.db \\
         [--dry-run]
 
 --eval-db is any evaluation dataset whose target-camera crop matches the runs

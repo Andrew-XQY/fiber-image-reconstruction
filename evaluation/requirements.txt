@@ -1,4 +1,4 @@
-# Tested in the existing /opt/anaconda3/envs/torch environment (Python 3.10).
+# Tested with Python 3.10.
 numpy>=1.26
 scipy>=1.11
 scikit-learn>=1.5

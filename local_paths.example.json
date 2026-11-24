@@ -1,0 +1,4 @@
+{
+  "dataset_root": "/path/to/processed",
+  "pixel_scale_json": "/path/to/chromox_pixel_scale.json"
+}

@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """Compare CLEAR26 image manifolds; edit CONFIG, then run this file."""
 
+import json
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+# Paths of this computer: copy local_paths.example.json to local_paths.json (Git ignores the copy).
+LOCAL_PATHS = json.loads((REPO_ROOT / "local_paths.json").read_text())
+
 CONFIG = {
-    "dataset_root": "/Users/andrewxu/Desktop/Workspace/dataset/processed",
-    "results_root": "/Users/andrewxu/Documents/GitHub/fiber-image-reconstruction/results",
+    "dataset_root": LOCAL_PATHS["dataset_root"],
+    "results_root": str(REPO_ROOT / "results"),
     "output_name": "latent_space_mmf",  # YYYYMMDD_latent_space; reruns get a time suffix.
     "cameras": ["cam1", "cam2", "cam3"],
     "mmf_cohorts": {"mmf1": "cam3", "mmf2": "cam1"},  # Anchor camera for matched acquisitions.

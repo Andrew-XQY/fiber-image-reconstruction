@@ -1,35 +1,22 @@
 from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 from pathlib import Path
-import os, socket
+import os
 
-# Hostname substring to machine profile.
-HOST_TO_MACHINE = {
-    "mac": "mac-andrewxu",
-    "uni-pc": "win-qiyuanxu",
-    "": "liverpool-hpc",                    # Default profile for unmatched hostnames.
-}
+# Dataset paths of this computer: conf/machine/local.yaml, which Git ignores.
+LOCAL_PROFILE = Path(__file__).resolve().parent / "conf" / "machine" / "local.yaml"
+DEFAULT_MACHINE = "liverpool-hpc"       # Used when there is no local profile.
 
 
 def detect_machine() -> str:
-    """Return the MACHINE override or first matching hostname profile."""
+    """Return the MACHINE override, "local" if conf/machine/local.yaml exists, else the default profile."""
     # Explicit environment override.
     machine = os.getenv("MACHINE")
     if machine:
         print("Using machine profile:", machine)
         return machine
 
-    # Match the hostname against configured profiles.
-    host = socket.gethostname().lower()
-    for key, profile in HOST_TO_MACHINE.items():
-        if key in host:
-            return profile
-
-    # No matching profile.
-    raise RuntimeError(
-        f"[config_utils] Could not resolve machine profile from hostname='{host}'. "
-        f"Please set MACHINE env variable to one of: {list(HOST_TO_MACHINE.values())}"
-    )
+    return "local" if LOCAL_PROFILE.is_file() else DEFAULT_MACHINE
 
 
 def _partial_resolve(cfg):

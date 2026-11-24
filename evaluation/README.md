@@ -4,13 +4,13 @@ Each experiment is a standalone Python script with its editable `CONFIG` diction
 
 ## 1. Camera-wise image manifolds
 
-Run from any working directory:
+Run from the repository root:
 
 ```bash
-/opt/anaconda3/envs/torch/bin/python -B /Users/andrewxu/Documents/GitHub/fiber-image-reconstruction/evaluation/latent_space.py
+python -B evaluation/latent_space.py
 ```
 
-The existing `torch` environment has all dependencies. For another Python 3.10+ environment, install `evaluation/requirements.txt` with that environment's Python, then run the script. `python3` on this Mac currently points to Apple's Python, which does not have these packages.
+Use a Python 3.10+ environment with `evaluation/requirements.txt` installed. The dataset folder is `dataset_root` in `local_paths.json`: copy `local_paths.example.json` to that name and set your paths. Git ignores the copy.
 
 Defaults: 100 random eligible images per dataset/camera/acquisition set, seed 42, full 256×256 grayscale pixels, one shared maximum intensity scale per camera/acquisition set, PCA starting at 50 components without whitening (adaptively expanded to retain at least 90% variance, capped at 512), then both unsupervised 3D UMAP (`n_neighbors=30`, `min_dist=0.3`) and t-SNE (`perplexity=30`, `max_iter=1500`). PCA is fitted once per camera/acquisition set, jointly across its included runs; both methods reuse exactly the same sampled images and PCA scores. Cameras are never mixed. Cam1 and cam3 are the fiber cameras; cam2 is the screen/target camera in the reconstruction configuration.
 
@@ -36,7 +36,7 @@ The script samples each camera without replacement from acquisitions containing 
 
 A new `results/YYYYMMDD_latent_space_mmf/` folder contains twelve rotating GIFs (two MMF-associated acquisition sets × three cameras × two methods), twelve still previews, six linear PCA baseline previews, optional interactive HTML files, method-specific sample/coordinate CSVs, compressed coordinates and PCA scores, `inventory.csv`, `manifest.json`, `run.log`, and a results README. Reruns on the same date receive a timestamp suffix instead of overwriting. `manifest.json` records the exact config, package versions, script hash, included/excluded runs, missing cameras, sampled zero images, retained PCA variance, and neighborhood trustworthiness relative to the retained PCA space. These are pixel-feature embeddings, not learned encoder latents. Coordinates from different acquisition sets, cameras, or methods cannot be compared directly.
 
-The recorded physical mapping is cam1 = MMF2, cam3 = MMF1, and cam2 = the shared reference. The requested twelve views use two acquisition cohorts: MMF1 requires a cam3 frame in the same run/sample group, and MMF2 requires a cam1 frame. In each cohort, all three cameras are plotted separately. The cohorts are overlapping selections of measured acquisitions, not six physically different camera/fiber combinations. Titles preserve the actual physical camera role. Shared reference images and other measured images can legitimately occur in both cohorts; sample CSVs make the overlap auditable.
+The recorded physical mapping is cam1 = MMF2, cam3 = MMF1, and cam2 = the shared reference. The twelve views use two acquisition cohorts: MMF1 requires a cam3 frame in the same run/sample group, and MMF2 requires a cam1 frame. In each cohort, all three cameras are plotted separately. The cohorts are overlapping selections of measured acquisitions, not six physically different camera/fiber combinations. Titles preserve the actual physical camera role. Shared reference images and other measured images can legitimately occur in both cohorts; sample CSVs make the overlap auditable.
 
 ### Why this pipeline
 
@@ -49,7 +49,7 @@ Treat UMAP/t-SNE as exploratory views: nonlinear cluster gaps and volumes are no
 ## 2. Synthetic vs real beam (domain gap)
 
 ```bash
-/opt/anaconda3/envs/torch/bin/python -B /Users/andrewxu/Documents/GitHub/fiber-image-reconstruction/evaluation/synthetic_vs_real.py
+python -B evaluation/synthetic_vs_real.py
 ```
 
 `synthetic_vs_real.py` measures how far the training-style synthetic images are from the real-beam evaluation images, per camera (never across cameras). Everything is set in the `CONFIG` dict at the top; `CONFIG["experiments"]` is a list, one entry per dataset, processed in a loop.

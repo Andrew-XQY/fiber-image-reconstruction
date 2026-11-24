@@ -1,13 +1,16 @@
+import json as _json
 import os
+import platform as _platform
 from pathlib import Path
 os.chdir(Path.cwd().parent)   # go one level up
-print(os.getcwd())         
+print(os.getcwd())
 
 from config_utils import detect_machine
-machine = detect_machine() 
+machine = detect_machine()
 
-# Notebook paths for the detected Windows or macOS profile.
-if any(win in machine for win in ["win", "windows"]): # windows
+# Notebook paths for Windows or macOS.
+_system = _platform.system()
+if _system == "Windows":
     dirs = {
         "merged_db_path": "C:/Users/qiyuanxu/Desktop/clear_2025_dataset.db",
         "merged_processed_db_path": "C:/Users/qiyuanxu/Desktop/clear_2025_processed_dataset.db",
@@ -73,7 +76,7 @@ if any(win in machine for win in ["win", "windows"]): # windows
             
     }
 
-elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
+elif _system == "Darwin":
     dirs = {
         "merged_db_path": "/Users/andrewxu/Desktop/clear_2025_dataset.db",
         "merged_processed_db_path": "/Users/andrewxu/Desktop/clear_2025_processed_dataset.db",
@@ -128,4 +131,8 @@ elif any(mac in machine for mac in ["mac", "darwin"]): # Mac
     }
 
 else:
-    raise ValueError(f"Unsupported machine: {machine}")
+    raise ValueError(f"Unsupported system: {_system}")
+
+# Paths of this computer: local_paths.json in the repository root adds or replaces entries.
+if Path("local_paths.json").is_file():
+    dirs.update(_json.loads(Path("local_paths.json").read_text()))

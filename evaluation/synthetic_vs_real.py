@@ -5,10 +5,15 @@ Part 1 prepares two paired datasets per camera; Part 2 analyses only the files P
 Edit CONFIG, then run this file.
 """
 
-DATA = "/Users/andrewxu/Desktop/Workspace/dataset/processed"
+import json
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+# Paths of this computer: copy local_paths.example.json to local_paths.json (Git ignores the copy).
+DATA = json.loads((REPO_ROOT / "local_paths.json").read_text())["dataset_root"]
 
 CONFIG = {
-    "results_root": "/Users/andrewxu/Documents/GitHub/fiber-image-reconstruction/results",
+    "results_root": str(REPO_ROOT / "results"),
     "output_name": "synthetic_vs_real",   # results/YYYYMMDD_<output_name>; reruns get a time suffix
     "seed": 42,
     "reuse_prepared": None,               # folder of an earlier full run: skip Part 1 (then the

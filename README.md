@@ -12,8 +12,8 @@ Use a Python 3.12 environment. Clone both repositories into the same folder and 
 
 ```bash
 git clone https://github.com/Andrew-XQY/XFlow.git
-git clone https://github.com/Andrew-XQY/fiber-image-reconstruction-comparison.git
-cd fiber-image-reconstruction-comparison
+git clone https://github.com/Andrew-XQY/fiber-image-reconstruction.git
+cd fiber-image-reconstruction
 python -m pip install -e "../XFlow[ml_torch,ext]" omegaconf opencv-python
 ```
 

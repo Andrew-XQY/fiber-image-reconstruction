@@ -36,7 +36,7 @@ paths:
     processed_520_background_friday_256: "/workspace/dataset/processed/Friday/520_background_256"
     processed_520_stimulation_small_256: "/workspace/dataset/processed/Friday/520_stimulation_small_256"
 
-    # Fixed SGM pattern set (parameter CSV + manifest), see dataset/sgm_patterns/v1 on the Mac.
+    # Fixed SGM pattern set (parameter CSV + manifest).
     sgm_patterns_v1: "/workspace/dataset/sgm_patterns/v1"
 
   output_root: "/workspace/results/${oc.env:EXPERIMENT_NAME}"

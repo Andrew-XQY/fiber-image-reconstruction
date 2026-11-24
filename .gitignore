@@ -55,6 +55,11 @@ outputs/
 runs/
 wandb/
 
+# Paths of this computer. Only the cluster profile is tracked.
+/conf/machine/*
+!/conf/machine/liverpool-hpc.yaml
+/local_paths.json
+
 # OS files
 .DS_Store
 Thumbs.db
